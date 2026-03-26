@@ -538,14 +538,14 @@
   // 1. CONFIG & FIREBASE INIT (AUTH ENABLED)
   // ==========================================
   const firebaseConfig = {
-    apiKey: "AIzaSyCAq7GpfFe8nI8KeiRSOyjw8VAmITMgS-w",
-    authDomain: "kpi-marketing-dashboard.firebaseapp.com",
-    databaseURL: "https://kpi-marketing-dashboard-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "kpi-marketing-dashboard",
-    storageBucket: "kpi-marketing-dashboard.firebasestorage.app",
-    messagingSenderId: "1097131516280",
-    appId: "1:1097131516280:web:84ed4bb71be34ccbf8e88d"
-  };
+  apiKey: "AIzaSyAz6Xm8xnsv9djeW04-kLuct_-JzQN0YlA",
+  authDomain: "esteem-acc18.firebaseapp.com",
+  databaseURL: "https://esteem-acc18-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "esteem-acc18",
+  storageBucket: "esteem-acc18.firebasestorage.app",
+  messagingSenderId: "97815135490",
+  appId: "1:97815135490:web:e34238c3022dac4681ae1b"
+};
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.app().database("https://kpi-marketing-dashboard-default-rtdb.europe-west1.firebasedatabase.app");
