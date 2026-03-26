@@ -548,8 +548,8 @@
 };
 
   firebase.initializeApp(firebaseConfig);
-  const db = firebase.app().database("https://kpi-marketing-dashboard-default-rtdb.europe-west1.firebasedatabase.app");
-  const auth = firebase.auth(); 
+const db = firebase.database();
+    const auth = firebase.auth(); 
 
   const AVAILABLE_METRICS = [
       "Охват", "Посещения профиля", "Чистый приток подписчиков",
