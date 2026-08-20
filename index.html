@@ -330,6 +330,25 @@
 .drr-warning { color: #FFD60A; font-weight: 700; background: rgba(255,214,10,0.15); padding: 2px 6px; border-radius: 4px; }
 .drr-bad { color: #FF453A; font-weight: 700; background: rgba(255,69,58,0.15); padding: 2px 6px; border-radius: 4px; }
 .finance-active { background: var(--bg-hover); border-color: var(--tx-accent); color: var(--tx-accent); }
+    .kpi-select {
+        background: var(--bg-card);
+        border: 1px solid var(--bd-color);
+        color: var(--tx-main);
+        padding: 8px 30px 8px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        appearance: none;
+        outline: none;
+        background-image: url('data:image/svg+xml;utf8,<svg fill="none" stroke="%239CA3AF" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6"></path></svg>');
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 14px;
+        font-family: 'Inter', sans-serif;
+        transition: 0.2s;
+    }
+    .kpi-select:hover, .kpi-select:focus { border-color: var(--tx-accent); }
 </style>
 </head>
 <body class="theme-dark">
@@ -370,7 +389,9 @@
         <button class="kpi-tab-btn" onclick="openTab('organic', this)">Organic</button>
       </div>
       <div class="controls-right">
-        
+        <select id="yearFilter" class="kpi-select" onchange="changeFilterYear(this.value)" style="margin-right:10px;">
+            <option value="All">Все года</option>
+        </select>
         <button class="theme-btn" onclick="googleLogout()" title="Выйти" style="margin-right:10px;">
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -586,6 +607,37 @@ const db = firebase.database();
   let activeAddMetricMonth = -1;
   let activeAddMetricChannel = -1;
   let chartInstances = {};
+    let currentFilterYear = 'All';
+
+  function updateYearFilterDropdown() {
+      const select = document.getElementById('yearFilter');
+      if (!select) return;
+      const years = new Set();
+      monthsData.forEach(m => {
+          const yearMatch = m.name.match(/\d{4}/);
+          if (yearMatch) years.add(yearMatch[0]);
+      });
+      
+      const currentVal = select.value;
+      let html = `<option value="All">Все года</option>`;
+      Array.from(years).sort().reverse().forEach(y => {
+          html += `<option value="${y}" ${y === currentVal ? 'selected' : ''}>${y}</option>`;
+      });
+      select.innerHTML = html;
+      
+      if (!years.has(currentVal) && currentVal !== 'All') {
+          currentFilterYear = 'All';
+          select.value = 'All';
+      }
+  }
+
+  function changeFilterYear(year) {
+      currentFilterYear = year;
+      renderTraffic();
+      renderSMM();
+      if (typeof renderOrganic === 'function') renderOrganic();
+      renderOverview();
+  }
 
   const NF = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
   const NFP = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
@@ -758,6 +810,9 @@ function fCount(n){
             }
         }
       }
+        const yearMatch = itemsData[i].name.match(/\d{4}/);
+      const year = yearMatch ? yearMatch[0] : '';
+      block.style.display = (currentFilterYear === 'All' || currentFilterYear === year) ? 'block' : 'none';
     }
     const children = Array.from(container.children);
     children.forEach(child => {
@@ -1437,7 +1492,7 @@ function renderSMM() {
     });
     recalcAllSMM();
 }
-  function renderOverview() {
+function renderOverview() {
     const labels = [];
     const tfSpendF = [], tfSpendP = [];
     const tfLeadsF = [], tfLeadsP = [];
@@ -1447,10 +1502,21 @@ function renderSMM() {
     const smmReachF = [], smmReachP = [];
     const smmSubsF = [], smmSubsP = [];
 
-    const lastIdx = monthsData.length - 1;
+    // Отбираем только индексы месяцев, которые подходят под фильтр
+    let filteredIndices = [];
+    monthsData.forEach((m, i) => {
+        const year = m.name.match(/\d{4}/)?.[0];
+        if (currentFilterYear === 'All' || currentFilterYear === year) {
+            filteredIndices.push(i);
+        }
+    });
+    
+    const lastIdx = filteredIndices.length > 0 ? filteredIndices[filteredIndices.length - 1] : -1;
     let currStats = { s:0, ps:0, l:0, pl:0, cpl:0, pcpl:0, smmL:0, smmPL:0, smmR:0, smmPR:0, smmS:0, smmPS:0 };
 
-    monthsData.forEach((m, mI) => {
+    // Проходимся только по отфильтрованным месяцам
+    filteredIndices.forEach((mI) => {
+        const m = monthsData[mI];
         labels.push(m.name);
         
         let ps=0, pl=0, fs=0, fl=0;
@@ -2267,6 +2333,7 @@ function initFirebaseListener(callback) {
                 monthsData = newMonthsData;
                 lastMonthsJson = newJson;
                 lastUiHash = newUiHash;
+                updateYearFilterDropdown();
 
                 if (isStructureChanged || isUiChanged) {
                     renderTraffic();
