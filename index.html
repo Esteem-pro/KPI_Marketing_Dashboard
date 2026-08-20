@@ -994,7 +994,19 @@ function findErrMetricName(metrics) {
   // ==========================================
   // 6. RENDER LOGIC
   // ==========================================
-  function onCellFocus(el){ const kind = el.dataset.kind || 'count'; if(kind==='percent') el.value=String(parsePercentLike(el.value)||""); else el.value=String(parseNumberLike(el.value)||""); setTimeout(()=>{try{el.setSelectionRange(el.value.length,el.value.length);}catch(e){}},0); }
+  function onCellFocus(el) {
+      if (el.value.trim() === '') return; // Оставляем ячейку пустой, если там ничего не было
+      
+      const kind = el.dataset.kind || 'count';
+      // Убрали || "", чтобы число 0 не превращалось в пустоту
+      if (kind === 'percent') {
+          el.value = String(parsePercentLike(el.value));
+      } else {
+          el.value = String(parseNumberLike(el.value));
+      }
+      
+      setTimeout(() => { try { el.setSelectionRange(el.value.length, el.value.length); } catch(e){} }, 0);
+  }
 
   function onCellBlur(el) {
       const rawValue = el.value.trim();
