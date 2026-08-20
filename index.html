@@ -62,6 +62,21 @@
     .kpi-content.active { display:block; }
     @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
+    /* === ПЛАВНЫЙ АККОРДЕОН ДЛЯ МЕСЯЦЕВ === */
+    .month-body-wrapper {
+        display: grid;
+        grid-template-rows: 1fr;
+        transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        opacity: 1;
+    }
+    .month-body-wrapper.collapsed {
+        grid-template-rows: 0fr;
+        opacity: 0;
+    }
+    .month-body-inner {
+        overflow: hidden;
+    }
+
     /* CARDS */
     .bento-card { background:var(--bg-card); border-radius:24px; padding:24px; margin-bottom:40px; border:1px solid var(--bd-color); box-shadow:0 4px 20px rgba(0,0,0,.05); }
     .month-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:12px; flex-wrap:wrap; }
@@ -802,12 +817,26 @@ function findErrMetricName(metrics) {
     }
   }
 
-  function toggleMonth(i){ 
-      monthsData[i].collapsed=!monthsData[i].collapsed; 
+function toggleMonth(i, el) { 
+      monthsData[i].collapsed = !monthsData[i].collapsed; 
       saveStructure(); 
-      renderTraffic(); 
-      renderSMM(); 
-      if (typeof renderOrganic === 'function') renderOrganic();
+      
+      // Плавная анимация через переключение классов в DOM (без ререндера)
+      if (el) {
+          const card = el.closest('.bento-card');
+          const wrapper = card.querySelector('.month-body-wrapper');
+          const icon = el.querySelector('span'); // ищем стрелочку
+          
+          if (wrapper) {
+              if (monthsData[i].collapsed) {
+                  wrapper.classList.add('collapsed');
+                  if(icon) icon.innerText = '▼';
+              } else {
+                  wrapper.classList.remove('collapsed');
+                  if(icon) icon.innerText = '▲';
+              }
+          }
+      }
   }
 
   function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
@@ -1090,7 +1119,7 @@ function renderTraffic() {
     _smartRenderList('trafficContainer', monthsData, 'tr', (month, mIndex) => {
       const chs = month.channels || [];
       
-      let html = `<div class="card-top"><div class="month-header"><div class="month-title" onclick="toggleMonth(${mIndex})">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
+      let html = `<div class="card-top"><div class="month-header"><div class="month-title" onclick="toggleMonth(${mIndex}, this)">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
       <div style="display:flex;gap:10px;"><button class="kpi-btn" onclick="addTrafficChannel(${mIndex})">+ Канал</button><button class="kpi-btn btn-delete" onclick="deleteMonth(${mIndex})">Удалить</button></div></div>
       
       <div class="stats-grid">
@@ -1102,7 +1131,7 @@ function renderTraffic() {
          <div class="stat-box forecast"><div class="stat-label">Прогноз Лидов A+B</div><div class="stat-val" id="m${mIndex}_stat_forecast">-</div><div class="stat-sub">Конец месяца</div></div>
       </div></div>
       
-      <div class="traffic-month-body" style="${month.collapsed?'display:none':''}"><div class="channel-bento-grid">`;
+      <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner traffic-month-body"><div class="channel-bento-grid">`;
 
       chs.forEach((ch, cI) => {
         const isFin = !!inputState[`ui_fin_mode_m${mIndex}_c${cI}`];
@@ -1182,7 +1211,7 @@ function renderTraffic() {
         <tr class="${collapsed?'week-collapsed':''}" data-week-group="m${mIndex}_c-1_w${wI}"><td class="col-sticky-1"></td><td class="col-type" style="font-weight:900;">%</td>${makeTotalPercCells(rowId, isTotalFin)}</tr>
         <tr class="row-spacer ${collapsed?'week-collapsed':''}" data-week-group="m${mIndex}_c-1_w${wI}"><td colspan="5"></td></tr>`;
       });
-      html += `</tbody></table></div></div></div></div>`;
+      html += `</tbody></table></div></div></div></div></div>`;
       return html;
     });
     recalcAll();
@@ -1320,7 +1349,7 @@ function renderSMM() {
     _smartRenderList('smmContainer', monthsData, 'smm', (month, mIndex) => {
       let html = `<div class="card-top">
       <div class="month-header">
-        <div class="month-title" onclick="toggleMonth(${mIndex})">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
+        <div class="month-title" onclick="toggleMonth(${mIndex}, this)">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
         <div style="display:flex;gap:10px;">
             <button class="kpi-btn" onclick="openSmmModal(${mIndex})">+ Канал</button>
             <button class="kpi-btn btn-delete" onclick="deleteMonth(${mIndex})">Удалить</button>
@@ -1357,7 +1386,7 @@ function renderSMM() {
       </div>
       </div>
       
-      <div class="smm-month-body" style="${month.collapsed?'display:none':''}"><div class="smm-stack-grid">`;
+      <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner smm-month-body"><div class="smm-stack-grid">`;
       
       (month.smmChannels || []).forEach((channel, cIndex) => {
         html += `<div class="channel-card"><div class="channel-header">
@@ -2302,7 +2331,7 @@ function initFirebaseListener(callback) {
   function renderOrganic() {
       _smartRenderList('organicContainer', monthsData, 'org', (month, mIndex) => {
           const chs = month.organicChannels || [];
-          let html = `<div class="card-top"><div class="month-header"><div class="month-title" onclick="toggleMonth(${mIndex})">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
+          let html = `<div class="card-top"><div class="month-header"><div class="month-title" onclick="toggleMonth(${mIndex}, this)">${month.name} <span style="font-size:12px;opacity:0.5;margin-left:5px;">${month.collapsed?'▼':'▲'}</span></div>
           <div style="display:flex;gap:10px;"><button class="kpi-btn" onclick="addOrganicChannel(${mIndex})">+ Канал</button><button class="kpi-btn btn-delete" onclick="deleteMonth(${mIndex})">Удалить</button></div></div>
           
           <div class="stats-grid">
@@ -2311,7 +2340,7 @@ function initFirebaseListener(callback) {
              <div class="stat-box"><div class="stat-label">Выручка</div><div class="stat-val" id="org_m${mIndex}_stat_rev">-</div></div>
           </div></div>
           
-          <div class="traffic-month-body" style="${month.collapsed?'display:none':''}"><div class="channel-bento-grid">`;
+          <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner traffic-month-body"><div class="channel-bento-grid">`;
 
           chs.forEach((ch, cI) => {
               const isFin = !!inputState[`ui_org_fin_m${mIndex}_c${cI}`];
@@ -2360,7 +2389,7 @@ function initFirebaseListener(callback) {
               });
               html += `</tbody></table></div></div>`;
           });
-          html += `</div></div></div>`;
+          html += `</div></div></div></div>`;
           return html;
       });
       recalcAllOrganic();
