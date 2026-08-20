@@ -1038,33 +1038,52 @@ function findErrMetricName(metrics) {
       if(id.startsWith('smm_')) recalcSMM(id); else recalc(id);
   } 
 
-  function setupEventListeners() {
-    const handleInput = (e) => {
-        if (e.target.classList.contains('cell-input')) {
-            const el = e.target;
-            const id = el.dataset.id;
-            const kind = el.dataset.kind || 'count'; 
-            const val = (kind === 'percent') ? parsePercentLike(el.value) : parseNumberLike(el.value);
-            
-            inputState[id] = val; 
-            db.ref('kpi_project/inputState/' + id).set(val); 
-            
-            if(id.startsWith('smm_')) recalcSMM(id); 
-            else if(id.startsWith('org_')) recalcOrganic(id); 
-            else recalc(id);
-        }
-    };
-    const handleFocus = (e) => { if(e.target.classList.contains('cell-input')) onCellFocus(e.target); };
-    const handleBlur = (e) => { if(e.target.classList.contains('cell-input')) onCellBlur(e.target); };
+function setupEventListeners() {
+      // Создаем хранилище таймаутов для каждой ячейки
+      const firebaseTimeouts = {};
 
-    ['trafficContainer', 'smmContainer', 'organicContainer'].forEach(containerId => {
-        const c = document.getElementById(containerId);
-        if(c) {
-            c.addEventListener('input', handleInput);
-            c.addEventListener('focusin', handleFocus);
-            c.addEventListener('focusout', handleBlur);
-        }
-    });
+      const handleInput = (e) => {
+          if (e.target.classList.contains('cell-input')) {
+              const el = e.target;
+              const id = el.dataset.id;
+              const kind = el.dataset.kind || 'count'; 
+              const val = (kind === 'percent') ? parsePercentLike(el.value) : parseNumberLike(el.value);
+              
+              // 1. Моментально сохраняем в локальный стейт (UI пересчитается сразу)
+              inputState[id] = val; 
+              
+              // Пересчитываем локальную математику
+              if(id.startsWith('smm_')) recalcSMM(id); 
+              else if(id.startsWith('org_')) recalcOrganic(id); 
+              else recalc(id);
+
+              // 2. DEBOUNCE для Firebase (Ждем 500мс перед отправкой в облако)
+              if (firebaseTimeouts[id]) {
+                  clearTimeout(firebaseTimeouts[id]); // Отменяем предыдущую отправку, если человек еще печатает
+              }
+              
+              firebaseTimeouts[id] = setTimeout(() => {
+                  db.ref('kpi_project/inputState/' + id).set(val)
+                    .then(() => {
+                         // Опционально: можно мигнуть зеленой точкой "Сохранено"
+                         console.log(`Saved ${id} to DB`);
+                    })
+                    .catch(err => console.error(err));
+              }, 500); // Задержка полсекунды
+          }
+      };
+
+      const handleFocus = (e) => { if(e.target.classList.contains('cell-input')) onCellFocus(e.target); };
+      const handleBlur = (e) => { if(e.target.classList.contains('cell-input')) onCellBlur(e.target); };
+
+      ['trafficContainer', 'smmContainer', 'organicContainer'].forEach(containerId => {
+          const c = document.getElementById(containerId);
+          if(c) {
+              c.addEventListener('input', handleInput);
+              c.addEventListener('focusin', handleFocus);
+              c.addEventListener('focusout', handleBlur);
+          }
+      });
   }
 
 function renderTraffic() {
