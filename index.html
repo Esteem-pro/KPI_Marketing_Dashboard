@@ -1092,7 +1092,7 @@ function toggleMonth(i, el) {
       setTimeout(() => { try { el.setSelectionRange(el.value.length, el.value.length); } catch(e){} }, 0);
   }
 
-  function onCellBlur(el) {
+function onCellBlur(el) {
       const rawValue = el.value.trim();
       const id = el.dataset.id;
       const kind = el.dataset.kind || 'count';
@@ -1102,15 +1102,22 @@ function toggleMonth(i, el) {
           inputState[id] = null; 
           db.ref('kpi_project/inputState/' + id).remove(); 
           if(id.startsWith('smm_')) recalcSMM(id); else if(id.startsWith('org_')) recalcOrganic(id); else recalc(id);
+          el.dataset.edited = "false";
           return;
       }
 
       let n;
       if (kind === 'percent') {
           n = parsePercentLike(rawValue);
+          // Считаем Дзен ТОЛЬКО если текст реально вводили ручками
+          if (el.dataset.edited === "true") {
+              n = applyDzenMagic(el, n);
+          }
       } else {
           n = parseNumberLike(rawValue);
       }
+
+      el.dataset.edited = "false"; // Сбрасываем флаг после обработки
 
       inputState[id] = n;
       db.ref('kpi_project/inputState/' + id).set(n);
@@ -1120,20 +1127,75 @@ function toggleMonth(i, el) {
       else el.value = formatCount(n);
 
       if(id.startsWith('smm_')) recalcSMM(id); else recalc(id);
-  } 
+  }
 
+    function applyDzenMagic(el, val) {
+      if (!el || val == null || val === '') return val;
+
+      const chName = (el.dataset.channel || '').toLowerCase();
+      const metricName = (el.dataset.metric || '').toLowerCase();
+
+      // Проверяем, что это Дзен и нужные метрики
+      if (chName.includes('dzen') || chName.includes('дзен')) {
+          if (metricName.includes('% дочитывания') || metricName.includes('err')) {
+              
+              const id = el.dataset.id;
+              const mMatch = id.match(/_m(\d+)/);
+              const cMatch = id.match(/_c(\d+)/);
+              const wMatch = id.match(/_w(\d+)/);
+              const dMatch = id.match(/_d(\d+)/);
+              const typeMatch = id.match(/_(plan|fact)$/);
+
+              if (mMatch && cMatch && wMatch) {
+                  const mI = mMatch[1];
+                  const cI = cMatch[1];
+                  const wI = wMatch[1];
+                  let reachKey = '';
+                  
+                  // Находим метрику показов для этой же строки
+                  const ch = monthsData[mI].smmChannels[cI];
+                  const reachMetricOriginalName = findReachMetricName(ch.metrics) || 'Показы';
+
+                  if (dMatch) {
+                      reachKey = getSMMDayKey(mI, cI, wI, dMatch[1], reachMetricOriginalName);
+                  } else if (typeMatch) {
+                      reachKey = getSMMKey(mI, cI, wI, reachMetricOriginalName, typeMatch[1]);
+                  }
+
+                  const impressions = inputState[reachKey] || 0;
+                  if (impressions > 0) {
+                      // Делим на показы и переводим в проценты
+                      return (val / impressions) * 100;
+                  } else {
+                      return 0; // Если показов нет, ставим 0 (на ноль делить нельзя)
+                  }
+              }
+          }
+      }
+      return val;
+  }
+    
 function setupEventListeners() {
       // Создаем хранилище таймаутов для каждой ячейки
       const firebaseTimeouts = {};
 
-      const handleInput = (e) => {
+const handleInput = (e) => {
           if (e.target.classList.contains('cell-input')) {
               const el = e.target;
               const id = el.dataset.id;
               const kind = el.dataset.kind || 'count'; 
-              const val = (kind === 'percent') ? parsePercentLike(el.value) : parseNumberLike(el.value);
               
-              // 1. Моментально сохраняем в локальный стейт (UI пересчитается сразу)
+              // Флаг: пользователь вручную редактирует ячейку
+              el.dataset.edited = "true";
+
+              let val = (kind === 'percent') ? parsePercentLike(el.value) : parseNumberLike(el.value);
+              
+              // Применяем авторасчет для Дзена в момент ввода
+              if (kind === 'percent') {
+                  val = applyDzenMagic(el, val);
+              }
+              
+              // 1. Моментально сохраняем в локальный стейт
               inputState[id] = val; 
               
               // Пересчитываем локальную математику
@@ -1141,19 +1203,18 @@ function setupEventListeners() {
               else if(id.startsWith('org_')) recalcOrganic(id); 
               else recalc(id);
 
-              // 2. DEBOUNCE для Firebase (Ждем 500мс перед отправкой в облако)
+              // 2. DEBOUNCE для Firebase
               if (firebaseTimeouts[id]) {
-                  clearTimeout(firebaseTimeouts[id]); // Отменяем предыдущую отправку, если человек еще печатает
+                  clearTimeout(firebaseTimeouts[id]); 
               }
               
               firebaseTimeouts[id] = setTimeout(() => {
                   db.ref('kpi_project/inputState/' + id).set(val)
-                    .then(() => {
-                         // Опционально: можно мигнуть зеленой точкой "Сохранено"
-                         console.log(`Saved ${id} to DB`);
-                    })
-                    .catch(err => console.error(err));
-              }, 500); // Задержка полсекунды
+                      .then(() => {
+                           console.log(`Saved ${id} to DB`);
+                      })
+                      .catch(err => console.error(err));
+              }, 500);
           }
       };
 
@@ -2026,8 +2087,31 @@ function calcGrand(m){
   // --- SMM CALC ---
   function getSMMKey(mI, cI, wI, metricName, type) { return `smm_m${mI}_c${cI}_w${wI}_${slugify(metricName)}_${type}`; }
   function getSMMDayKey(mI, cI, wI, dI, metricName) { return `smm_m${mI}_c${cI}_w${wI}_d${dI}_${slugify(metricName)}`; }
-  function makeSMMCells(mI, cI, wI, type, metrics){ let html = ''; metrics.forEach(metricName => { const kind = isPercentMetric(metricName) ? 'percent' : 'count'; const key = getSMMKey(mI, cI, wI, metricName, type); const val = inputState[key]; const shown = (kind==='percent') ? formatPercent(val) : formatCount(val); html += `<td><input type="text" inputmode="numeric" class="cell-input" data-id="${key}" data-kind="${kind}" value="${shown}" placeholder="-"></td>`; }); return html; }
-  function makeSMMDayCells(mI, cI, wI, dI, metrics){ let html = ''; metrics.forEach(metricName => { const kind = isPercentMetric(metricName) ? 'percent' : 'count'; const key = getSMMDayKey(mI, cI, wI, dI, metricName); const val = inputState[key]; const shown = (kind==='percent') ? formatPercent(val) : formatCount(val); html += `<td><input type="text" inputmode="numeric" class="cell-input" data-id="${key}" data-kind="${kind}" value="${shown}" placeholder="-"></td>`; }); return html; }
+  function makeSMMCells(mI, cI, wI, type, metrics){ 
+      let html = ''; 
+      const chName = monthsData[mI].smmChannels[cI].name; // Получаем имя канала
+      metrics.forEach(metricName => { 
+          const kind = isPercentMetric(metricName) ? 'percent' : 'count'; 
+          const key = getSMMKey(mI, cI, wI, metricName, type); 
+          const val = inputState[key]; 
+          const shown = (kind==='percent') ? formatPercent(val) : formatCount(val); 
+          html += `<td><input type="text" inputmode="numeric" class="cell-input" data-id="${key}" data-kind="${kind}" data-channel="${chName}" data-metric="${metricName}" value="${shown}" placeholder="-"></td>`; 
+      }); 
+      return html; 
+  }
+
+  function makeSMMDayCells(mI, cI, wI, dI, metrics){ 
+      let html = ''; 
+      const chName = monthsData[mI].smmChannels[cI].name; // Получаем имя канала
+      metrics.forEach(metricName => { 
+          const kind = isPercentMetric(metricName) ? 'percent' : 'count'; 
+          const key = getSMMDayKey(mI, cI, wI, dI, metricName); 
+          const val = inputState[key]; 
+          const shown = (kind==='percent') ? formatPercent(val) : formatCount(val); 
+          html += `<td><input type="text" inputmode="numeric" class="cell-input" data-id="${key}" data-kind="${kind}" data-channel="${chName}" data-metric="${metricName}" value="${shown}" placeholder="-"></td>`; 
+      }); 
+      return html; 
+  }
   function makeSMMPercCells(mI, cI, wI, metrics){ let html = ''; metrics.forEach(metricName => { const id = `smm_perc_m${mI}_c${cI}_w${wI}_${slugify(metricName)}`; html += `<td><div id="${id}" class="badge badge-neutral">-</div></td>`; }); return html; }
   function recalcSMM(id) { const parts = id.split('_'); let mI, cI, wI; parts.forEach(p => { if(p.startsWith('m') && !isNaN(parseInt(p.substr(1)))) mI = parseInt(p.substr(1)); if(p.startsWith('c') && !isNaN(parseInt(p.substr(1)))) cI = parseInt(p.substr(1)); if(p.startsWith('w') && !isNaN(parseInt(p.substr(1)))) wI = parseInt(p.substr(1)); }); if (mI !== undefined && cI !== undefined && wI !== undefined) { calcSMMDaysToWeek(mI, cI, wI); calcSMMRowPerc(mI, cI, wI); calcSMMGrand(mI); calcSMMChannelTotal(mI, cI); } }
 function calcSMMDaysToWeek(mI, cI, wI) {
