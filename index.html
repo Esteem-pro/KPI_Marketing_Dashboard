@@ -614,6 +614,7 @@ const db = firebase.database();
       if (!select) return;
       const years = new Set();
       monthsData.forEach(m => {
+          if (!m || m._deleted) return;
           const yearMatch = m.name.match(/\d{4}/);
           if (yearMatch) years.add(yearMatch[0]);
       });
@@ -1429,7 +1430,7 @@ function renderTraffic() {
 
 function calcSMMMonthTotal(mI) {
     const month = monthsData[mI];
-    if (!month || !month.smmChannels) return;
+    if (!month || month._deleted || !month.smmChannels) return;
 
     month.weeks.forEach((w, wI) => {
         let stats = {
@@ -1439,6 +1440,7 @@ function calcSMMMonthTotal(mI) {
         };
 
         month.smmChannels.forEach((ch, cI) => {
+            if (!ch || ch._deleted) return;
             ch.metrics.forEach(met => {
                 const l = met.toLowerCase();
                 const keyP = getSMMKey(mI, cI, wI, met, 'plan');
@@ -1596,6 +1598,7 @@ function renderOverview() {
     // Отбираем только индексы месяцев, которые подходят под фильтр
     let filteredIndices = [];
     monthsData.forEach((m, i) => {
+        if (!m || m._deleted) return;
         const year = m.name.match(/\d{4}/)?.[0];
         if (currentFilterYear === 'All' || currentFilterYear === year) {
             filteredIndices.push(i);
@@ -1755,7 +1758,7 @@ function renderOverview() {
   }
   
  function calcDaysToWeek(mI, wI, cI) {
-    const month = monthsData[mI]; if (!month) return;
+    const month = monthsData[mI]; if (!month || month._deleted) return;
     const weekObj = month.weeks[wI]; if (typeof weekObj !== 'object' || !weekObj.days) return;
     const days = weekObj.days; const rowId = `m${mI}_w${wI}`;
     
@@ -1925,6 +1928,7 @@ function makeTotalPercCells(rowId, isFin){
   function calcWeekTotal(m,w){ 
       let s={ps:0,pl:0,fs:0,fl:0, fRev:0}; 
       const mI=parseInt(m.replace('m','')); 
+      if (!monthsData[mI] || monthsData[mI]._deleted) return;
       
       (monthsData[mI].channels||[]).forEach((_,i)=>{ 
           const id=`${m}_${w}_c${i}`; 
@@ -1961,6 +1965,7 @@ function makeTotalPercCells(rowId, isFin){
   }
   
 function calcChannelGrand(mI,cI){ 
+      if (!monthsData[mI] || monthsData[mI]._deleted) return;
       const timeProgress = getMonthTimeProgress(monthsData[mI].name);
       let ps=0,pl=0,fs=0,fl=0, fRev=0;
       const weeks=monthsData[mI].weeks; 
@@ -2034,6 +2039,7 @@ function calcChannelGrand(mI,cI){
 function calcGrand(m){ 
     let s={ps:0,pl:0,fs:0,fl:0, fRev:0}; 
     const mI=parseInt(m.replace('m','')); 
+    if (!monthsData[mI] || monthsData[mI]._deleted) return;
     const chs=monthsData[mI].channels||[]; 
     
     monthsData[mI].weeks.forEach((_,wI)=>{ 
@@ -2145,10 +2151,10 @@ function calcGrand(m){
   function recalcSMM(id) { const parts = id.split('_'); let mI, cI, wI; parts.forEach(p => { if(p.startsWith('m') && !isNaN(parseInt(p.substr(1)))) mI = parseInt(p.substr(1)); if(p.startsWith('c') && !isNaN(parseInt(p.substr(1)))) cI = parseInt(p.substr(1)); if(p.startsWith('w') && !isNaN(parseInt(p.substr(1)))) wI = parseInt(p.substr(1)); }); if (mI !== undefined && cI !== undefined && wI !== undefined) { calcSMMDaysToWeek(mI, cI, wI); calcSMMRowPerc(mI, cI, wI); calcSMMGrand(mI); calcSMMChannelTotal(mI, cI); } }
 function calcSMMDaysToWeek(mI, cI, wI) {
     const month = monthsData[mI];
-    if(!month) return;
+    if(!month || month._deleted) return;
     const days = month.weeks[wI].days || [];
     const ch = month.smmChannels[cI];
-    if(!ch) return;
+    if(!ch || ch._deleted) return;
 
     const reachMet = findReachMetricName(ch.metrics);
     const errMet = findErrMetricName(ch.metrics);
@@ -2230,11 +2236,15 @@ function calcSMMDaysToWeek(mI, cI, wI) {
         }
     });
 }
-  function calcSMMRowPerc(mI, cI, wI) { const ch = monthsData[mI].smmChannels[cI]; if(!ch) return; ch.metrics.forEach(metricName => { const plan = inputState[getSMMKey(mI, cI, wI, metricName, 'plan')] || 0; const fact = inputState[getSMMKey(mI, cI, wI, metricName, 'fact')] || 0; const badgeId = `smm_perc_m${mI}_c${cI}_w${wI}_${slugify(metricName)}`; badge(badgeId, plan, fact); }); }
+  function calcSMMRowPerc(mI, cI, wI) { 
+      const month = monthsData[mI]; if(!month || month._deleted) return;
+      const ch = month.smmChannels[cI]; if(!ch || ch._deleted) return; 
+      ch.metrics.forEach(metricName => { const plan = inputState[getSMMKey(mI, cI, wI, metricName, 'plan')] || 0; const fact = inputState[getSMMKey(mI, cI, wI, metricName, 'fact')] || 0; const badgeId = `smm_perc_m${mI}_c${cI}_w${wI}_${slugify(metricName)}`; badge(badgeId, plan, fact); }); 
+  }
 
 function calcSMMGrand(mI) {
     const month = monthsData[mI];
-    if (!month) return;
+    if (!month || month._deleted) return;
 
     let totalReach = { p: 0, f: 0 };
     let totalLeads = { p: 0, f: 0 };
@@ -2242,6 +2252,7 @@ function calcSMMGrand(mI) {
     let errCalc = { pReactions: 0, pReach: 0, fReactions: 0, fReach: 0 };
 
     (month.smmChannels || []).forEach((ch, cI) => {
+        if (!ch || ch._deleted) return;
         ch.metrics.forEach(met => {
             const l = met.toLowerCase();
             const isReach = l.includes('охват') || l.includes('показы') || l.includes('просмотры');
@@ -2310,7 +2321,7 @@ function calcSMMGrand(mI) {
 
 function calcSMMChannelTotal(mI, cI) {
     const month = monthsData[mI];
-    if (!month || !month.smmChannels[cI]) return;
+    if (!month || month._deleted || !month.smmChannels[cI] || month.smmChannels[cI]._deleted) return;
     
     const channel = month.smmChannels[cI];
     const timeProgress = getMonthTimeProgress(month.name); 
@@ -2390,7 +2401,9 @@ function calcSMMChannelTotal(mI, cI) {
 }
 function recalcAllSMM() { 
     monthsData.forEach((m,mI)=> { 
+        if (!m || m._deleted) return;
         (m.smmChannels||[]).forEach((ch,cI)=> { 
+            if (!ch || ch._deleted) return;
             m.weeks.forEach((w,wI)=> { 
                 calcSMMDaysToWeek(mI,cI,wI); 
                 calcSMMRowPerc(mI,cI,wI); 
@@ -2584,7 +2597,7 @@ function initFirebaseListener(callback) {
   }
 
   function calcOrgDaysToWeek(mI, wI, cI) {
-      const month = monthsData[mI]; if (!month) return;
+      const month = monthsData[mI]; if (!month || month._deleted) return;
       const weekObj = month.weeks[wI]; if (!weekObj || !weekObj.days) return;
       const rowId = `org_m${mI}_w${wI}`;
       
@@ -2611,6 +2624,7 @@ function initFirebaseListener(callback) {
       if(mKey) mI=parseInt(mKey.replace('m','')); if(wKey) wI=parseInt(wKey.replace('w','')); if(cKey) cI=parseInt(cKey.replace('c',''));
       
       if(mI>=0 && wI>=0 && cI>=0) {
+          if (!monthsData[mI] || monthsData[mI]._deleted) return;
           calcOrgDaysToWeek(mI, wI, cI);
           
           const rowId = `org_m${mI}_w${wI}_c${cI}`;
@@ -2652,7 +2666,9 @@ function initFirebaseListener(callback) {
 
   function recalcAllOrganic() {
       monthsData.forEach((m, mI) => {
+          if (!m || m._deleted) return;
           (m.organicChannels || []).forEach((c, cI) => {
+              if (c === '__deleted__') return;
               m.weeks.forEach((w, wI) => { recalcOrganic(`org_m${mI}_w${wI}_c${cI}_fact_visits`); });
           });
       });
