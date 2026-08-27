@@ -785,8 +785,16 @@ function fCount(n){
   function _smartRenderList(containerId, itemsData, prefix, htmlGenerator) {
     const container = document.getElementById(containerId);
     const count = itemsData.length;
-    for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i++) {
       const blockId = `${prefix}_block_${i}`;
+      
+      // Игнорируем удаленные месяца и удаляем их HTML-блок, если он остался на странице
+      if (!itemsData[i] || itemsData[i]._deleted) {
+          const el = document.getElementById(blockId);
+          if (el) el.remove();
+          continue;
+      }
+      
       const newHTML = htmlGenerator(itemsData[i], i);
       let block = document.getElementById(blockId);
       if (!block) {
@@ -990,40 +998,54 @@ function toggleMonth(i, el) {
     saveStructure();
   }
 
-  function _reindexState(targetType, mIdx, cIdx = -1) {
-    const newState = {};
-    Object.keys(inputState).forEach(key => {
-      const mMatch = key.match(/(?:^|_)m(\d+)(?:_|$)/);
-      if (!mMatch) { newState[key] = inputState[key]; return; }
-      const keyM = parseInt(mMatch[1]);
-      if (targetType === 'month') {
-        if (keyM < mIdx) { newState[key] = inputState[key]; }
-        else if (keyM > mIdx) { const newKey = key.replace(`m${keyM}`, `m${keyM - 1}`); newState[newKey] = inputState[key]; }
-        return;
-      }
-      if (keyM !== mIdx) { newState[key] = inputState[key]; return; }
-      const isSmmKey = key.startsWith('smm_');
-      if (targetType === 'traffic' && isSmmKey) { newState[key] = inputState[key]; return; }
-      if (targetType === 'smm' && !isSmmKey) { newState[key] = inputState[key]; return; }
-      const cMatch = key.match(/(?:^|_)c(\d+)(?:_|$)/);
-      if (!cMatch) { newState[key] = inputState[key]; return; }
-      const keyC = parseInt(cMatch[1]);
-      if (keyC < cIdx) { newState[key] = inputState[key]; }
-      else if (keyC > cIdx) { const newKey = key.replace(new RegExp(`_c${keyC}(_|$)`), `_c${keyC - 1}$1`); newState[newKey] = inputState[key]; }
-    });
-    inputState = newState;
+ function _cleanupDeletedState(monthIdx, channelIdx = -1, type = 'all') {
+      const updates = {};
+      Object.keys(inputState).forEach(key => {
+          let shouldDelete = false;
+          // Точный парсинг индексов из ключа
+          const mMatch = key.match(/(?:^|_)m(\d+)(?:_|$)/);
+          const cMatch = key.match(/(?:^|_)c(\d+)(?:_|$)/);
+          
+          const hasM = mMatch && parseInt(mMatch[1]) === monthIdx;
+          const hasC = cMatch && parseInt(cMatch[1]) === channelIdx;
+
+          if (type === 'all' && hasM) {
+              shouldDelete = true; // Удаляем месяц целиком (все каналы)
+          } else if (type === 'traffic' && hasM && hasC && !key.startsWith('smm_') && !key.startsWith('org_')) {
+              shouldDelete = true;
+          } else if (type === 'smm' && hasM && hasC && key.startsWith('smm_')) {
+              shouldDelete = true;
+          } else if (type === 'organic' && hasM && hasC && key.startsWith('org_')) {
+              shouldDelete = true;
+          }
+
+          if (shouldDelete) {
+              delete inputState[key];
+              updates[key] = null; // null стирает ключ в Firebase
+          }
+      });
+      if (Object.keys(updates).length > 0) db.ref('kpi_project/inputState').update(updates);
   }
 
   function deleteMonth(i) { 
     if(confirm("Удалить этот месяц и все данные?")){ 
-      _reindexState('month', i); monthsData.splice(i,1); renderTraffic(); renderSMM(); 
+      _cleanupDeletedState(i); 
+      // Вместо удаления (splice), ставим маркер-заглушку, чтобы индексы не смещались
+      monthsData[i] = { _deleted: true }; 
+      renderTraffic(); renderSMM(); if(typeof renderOrganic === 'function') renderOrganic();
       saveStructure();
     } 
   }
   function addTrafficChannel(mI){ const n=prompt("Название канала:"); if(n){ monthsData[mI].channels.push(n); renderTraffic(); saveStructure(); } }
   function deleteTrafficChannel(mI,cI){ 
-    if(confirm("Удалить канал?")){ _reindexState('traffic', mI, cI); monthsData[mI].channels.splice(cI,1); renderTraffic(); saveStructure(); } 
+    if(confirm("Удалить канал?")){ 
+      _cleanupDeletedState(mI, cI, 'traffic'); 
+      // Ставим строку-заглушку вместо удаления
+      monthsData[mI].channels[cI] = "__deleted__"; 
+      renderTraffic(); saveStructure(); 
+    } 
   }
+    
   function updateWeekName(m,w,txt){ monthsData[m].weeks[w].title=txt; saveStructure(); }
 
   // ==========================================
@@ -1056,7 +1078,15 @@ function toggleMonth(i, el) {
           saveStructure();
       }
   }
-  function deleteSmmChannel(mI, cI) { if(confirm("Удалить этот SMM канал?")) { _reindexState('smm', mI, cI); monthsData[mI].smmChannels.splice(cI, 1); renderSMM(); saveStructure(); } }
+  function deleteSmmChannel(mI, cI) { 
+      if(confirm("Удалить этот SMM канал?")) { 
+          _cleanupDeletedState(mI, cI, 'smm'); 
+          // Ставим заглушку вместо удаления (splice)
+          monthsData[mI].smmChannels[cI] = { _deleted: true }; 
+          renderSMM(); 
+          saveStructure(); 
+      } 
+  }
   function deleteSmmMetric(mI, cI, metricName){
     if(confirm(`Удалить колонку "${metricName}"?`)){
        const ch = monthsData[mI].smmChannels[cI]; const idx = ch.metrics.indexOf(metricName);
@@ -1249,7 +1279,7 @@ function renderTraffic() {
       
       <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner traffic-month-body"><div class="channel-bento-grid">`;
 
-      chs.forEach((ch, cI) => {
+      chs.forEach((ch, cI) => { if (!ch || ch === '__deleted__') return;
         const isFin = !!inputState[`ui_fin_mode_m${mIndex}_c${cI}`];
         const finBtnClass = isFin ? 'finance-active' : '';
 
@@ -1504,7 +1534,7 @@ function renderSMM() {
       
       <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner smm-month-body"><div class="smm-stack-grid">`;
       
-      (month.smmChannels || []).forEach((channel, cIndex) => {
+     (month.smmChannels || []).forEach((channel, cIndex) => { if (!channel || channel._deleted) return;
         html += `<div class="channel-card"><div class="channel-header">
         <div>
             <div class="channel-name">${channel.name} <span class="add-metric-btn" onclick="openAddMetricModal(${mIndex}, ${cIndex})">+ Метрика</span><span class="delete-ch-btn" onclick="deleteSmmChannel(${mIndex},${cIndex})">×</span></div>
@@ -1576,14 +1606,14 @@ function renderOverview() {
     let currStats = { s:0, ps:0, l:0, pl:0, cpl:0, pcpl:0, smmL:0, smmPL:0, smmR:0, smmPR:0, smmS:0, smmPS:0 };
 
     // Проходимся только по отфильтрованным месяцам
-    filteredIndices.forEach((mI) => {
+    filteredIndices.forEach((mI) => { if (!monthsData[mI] || monthsData[mI]._deleted) return;
         const m = monthsData[mI];
         labels.push(m.name);
         
         let ps=0, pl=0, fs=0, fl=0;
         const chs = m.channels || [];
         m.weeks.forEach((_, wI) => {
-            chs.forEach((_, cI) => {
+            chs.forEach((_, cI) => { if (_ === '__deleted__') return;
                 const id = `m${mI}_w${wI}_c${cI}`;
                 ps += inputState[`${id}_plan_spend`] || 0;
                 pl += inputState[`${id}_plan_leads`] || 0;
@@ -1602,7 +1632,7 @@ function renderOverview() {
         let leadsF=0, leadsP=0;
         let subsF=0, subsP=0;
 
-        (m.smmChannels || []).forEach((ch, cI) => {
+        (m.smmChannels || []).forEach((ch, cI) => { if (!ch || ch._deleted) return;
              ch.metrics.forEach(metricName => {
                  const isReach = metricName.includes('Охват') || metricName.includes('Показы') || metricName.includes('Просмотры');
                  const isLeads = metricName.includes('Лиды');
@@ -2082,8 +2112,7 @@ function calcGrand(m){
     const fc=activeDays>0?Math.round((s.fl/activeDays)*totalDays):0; 
     txt(`${m}_stat_forecast`,fCount(fc)); 
 }
-    function recalcAll(){ monthsData.forEach((m,mI)=> m.weeks.forEach((w,wI)=> (m.channels||[]).forEach((c,cI)=>{ calcDaysToWeek(mI, wI, cI); calcRow(`m${mI}_w${wI}_c${cI}`); }))); monthsData.forEach((m,mI)=> m.weeks.forEach((w,wI)=> calcWeekTotal(`m${mI}`, `w${wI}`))); monthsData.forEach((m,mI)=> { calcGrand(`m${mI}`); (m.channels||[]).forEach((c,cI)=> calcChannelGrand(mI, cI)); }); }
-
+   function recalcAll(){ monthsData.forEach((m,mI)=>{ if(!m||m._deleted) return; m.weeks.forEach((w,wI)=> (m.channels||[]).forEach((c,cI)=>{ if(!c||c==='__deleted__') return; calcDaysToWeek(mI, wI, cI); calcRow(`m${mI}_w${wI}_c${cI}`); }));}); monthsData.forEach((m,mI)=>{ if(!m||m._deleted) return; m.weeks.forEach((w,wI)=> calcWeekTotal(`m${mI}`, `w${wI}`));}); monthsData.forEach((m,mI)=> { if(!m||m._deleted) return; calcGrand(`m${mI}`); (m.channels||[]).forEach((c,cI)=> { if(!c||c==='__deleted__') return; calcChannelGrand(mI, cI); }); }); }
   // --- SMM CALC ---
   function getSMMKey(mI, cI, wI, metricName, type) { return `smm_m${mI}_c${cI}_w${wI}_${slugify(metricName)}_${type}`; }
   function getSMMDayKey(mI, cI, wI, dI, metricName) { return `smm_m${mI}_c${cI}_w${wI}_d${dI}_${slugify(metricName)}`; }
@@ -2459,7 +2488,15 @@ function initFirebaseListener(callback) {
       db.ref('kpi_project/inputState/' + key).set(inputState[key]); renderOrganic();
   }
   function addOrganicChannel(mI) { const n=prompt("Название канала:"); if(n){ monthsData[mI].organicChannels.push(n); renderOrganic(); saveStructure(); } }
-  function deleteOrganicChannel(mI, cI) { if(confirm("Удалить канал?")){ monthsData[mI].organicChannels.splice(cI,1); renderOrganic(); saveStructure(); } }
+  function deleteOrganicChannel(mI, cI) { 
+      if(confirm("Удалить канал?")){ 
+          _cleanupDeletedState(mI, cI, 'organic'); 
+          // Ставим заглушку
+          monthsData[mI].organicChannels[cI] = "__deleted__"; 
+          renderOrganic(); 
+          saveStructure(); 
+      } 
+  }
 
   function makeOrgCells(rowId, cI, type, isFin) {
       const id = `${rowId}_c${cI}`;
@@ -2493,7 +2530,7 @@ function initFirebaseListener(callback) {
           
           <div class="month-body-wrapper ${month.collapsed ? 'collapsed' : ''}"><div class="month-body-inner traffic-month-body"><div class="channel-bento-grid">`;
 
-          chs.forEach((ch, cI) => {
+          chs.forEach((ch, cI) => { if (!ch || ch === '__deleted__') return;
               const isFin = !!inputState[`ui_org_fin_m${mIndex}_c${cI}`];
               const finBtnClass = isFin ? 'finance-active' : '';
 
