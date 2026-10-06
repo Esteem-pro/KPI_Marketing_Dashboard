@@ -3,2886 +3,836 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>KPI Marketing Dashboard v2.0</title>
+<title>KPI Marketing Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-auth-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-database-compat.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-/* ═══════════════════════════════════════════════════════════════
-   CSS RESET & VARIABLES
-   ═══════════════════════════════════════════════════════════════ */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  /* Light Theme */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --bg-hover: #e2e8f0;
-  --bg-active: #dbeafe;
-  
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --text-tertiary: #94a3b8;
-  
-  --border-color: #e2e8f0;
-  --border-light: #f1f5f9;
-  
-  --accent-primary: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-light: #dbeafe;
-  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  
-  --success: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --warning: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.1);
-  --danger: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.1);
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-  
-  --sidebar-width: 260px;
-  --sidebar-collapsed: 72px;
-  --header-height: 64px;
-  
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.25s ease;
-  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --chart-grid: rgba(0, 0, 0, 0.06);
-}
-
-[data-theme="dark"] {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-hover: #334155;
-  --bg-active: #1e3a5f;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  
-  --border-color: #334155;
-  --border-light: #1e293b;
-  
-  --accent-primary: #60a5fa;
-  --accent-hover: #3b82f6;
-  --accent-light: rgba(96, 165, 250, 0.15);
-  
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
-  
-  --chart-grid: rgba(255, 255, 255, 0.06);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   BASE STYLES
-   ═══════════════════════════════════════════════════════════════ */
-body {
-  font-family: var(--font-family);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.5;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
-
-/* ═══════════════════════════════════════════════════════════════
-   LOGIN SCREEN
-   ═══════════════════════════════════════════════════════════════ */
-.login-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-primary);
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-
-.login-screen.hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.login-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 48px 40px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-xl);
-  text-align: center;
-}
-
-.login-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 24px;
-  background: var(--accent-gradient);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-}
-
-.login-title {
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.login-subtitle {
-  color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: 32px;
-}
-
-.google-btn {
-  width: 100%;
-  padding: 14px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.google-btn:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--text-tertiary);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.google-btn:active { transform: translateY(0); }
-
-.google-btn svg { width: 20px; height: 20px; }
-
-.login-error {
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: var(--danger-bg);
-  border-radius: var(--radius-sm);
-  color: var(--danger);
-  font-size: 13px;
-  display: none;
-}
-
-.login-error.show { display: block; }
-
-/* ═══════════════════════════════════════════════════════════════
-   LAYOUT
-   ═══════════════════════════════════════════════════════════════ */
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-}
-
-/* Sidebar */
-.sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--sidebar-width);
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  z-index: 100;
-  transition: transform var(--transition-normal), width var(--transition-normal);
-}
-
-.sidebar-header {
-  height: var(--header-height);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--border-color);
-  gap: 12px;
-}
-
-.sidebar-logo {
-  width: 36px;
-  height: 36px;
-  background: var(--accent-gradient);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.sidebar-brand {
-  font-size: 18px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.sidebar-nav {
-  flex: 1;
-  padding: 16px 12px;
-  overflow-y: auto;
-}
-
-.nav-section {
-  margin-bottom: 24px;
-}
-
-.nav-section-title {
-  padding: 0 12px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-tertiary);
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  margin-bottom: 2px;
-}
-
-.nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.nav-item.active {
-  background: var(--accent-light);
-  color: var(--accent-primary);
-}
-
-.nav-item svg {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.nav-item .nav-badge {
-  margin-left: auto;
-  padding: 2px 8px;
-  background: var(--accent-primary);
-  color: white;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid var(--border-color);
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.user-info:hover { background: var(--bg-hover); }
-
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  background: var(--accent-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.user-details {
-  flex: 1;
-  min-width: 0;
-}
-
-.user-name {
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.user-email {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.logout-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.logout-btn:hover {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-
-/* Main Content */
-.main-content {
-  flex: 1;
-  margin-left: var(--sidebar-width);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Header */
-.main-header {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  height: var(--header-height);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  gap: 16px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.menu-toggle {
-  display: none;
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: transparent;
-  color: var(--text-primary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  align-items: center;
-  justify-content: center;
-}
-
-.menu-toggle:hover { background: var(--bg-hover); }
-
-.page-title {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-select {
-  padding: 8px 32px 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  transition: border-color var(--transition-fast);
-}
-
-.header-select:hover,
-.header-select:focus {
-  border-color: var(--accent-primary);
-  outline: none;
-}
-
-.icon-btn {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  position: relative;
-}
-
-.icon-btn:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.icon-btn svg { width: 20px; height: 20px; }
-
-.icon-btn .badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 18px;
-  height: 18px;
-  background: var(--danger);
-  color: white;
-  border-radius: var(--radius-full);
-  font-size: 10px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.save-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.save-status .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  transition: background var(--transition-fast);
-}
-
-.save-status.online .dot {
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
-}
-
-/* Page Content */
-.page-content {
-  flex: 1;
-  padding: 24px;
-}
-
-.page { display: none; animation: fadeIn 0.3s ease; }
-.page.active { display: block; }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   COMPONENTS
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Cards */
-.card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: box-shadow var(--transition-fast);
-}
-
-.card:hover { box-shadow: var(--shadow-md); }
-
-.card-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.card-title {
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.card-body { padding: 24px; }
-
-/* KPI Cards Grid */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.kpi-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  position: relative;
-  overflow: hidden;
-  transition: all var(--transition-fast);
-}
-
-.kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.kpi-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--kpi-color, var(--accent-primary));
-}
-
-.kpi-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.kpi-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.kpi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  background: var(--kpi-bg, var(--accent-light));
-}
-
-.kpi-value {
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 8px;
-}
-
-.kpi-comparison {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.kpi-trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-weight: 600;
-}
-
-.kpi-trend.up { background: var(--success-bg); color: var(--success); }
-.kpi-trend.down { background: var(--danger-bg); color: var(--danger); }
-.kpi-trend.neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-
-.kpi-target {
-  color: var(--text-tertiary);
-}
-
-/* Progress Bar */
-.progress-bar {
-  height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-top: 12px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--kpi-color, var(--accent-primary));
-  border-radius: var(--radius-full);
-  transition: width 0.5s ease;
-}
-
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--tx);line-height:1.5;overflow-x:hidden}
+body.theme-dark{
+--bg:#0b0e14;--bg2:#151923;--bg3:#1c2231;--bg4:#242b3d;
+--tx:#f1f3f7;--tx2:#8b93a7;--tx3:#5a6178;
+--ac:#6366f1;--ac2:#818cf8;--acBg:rgba(99,102,241,.12);
+--bd:#252d40;--bdL:#1c2231;
+--grn:#22c55e;--grnBg:rgba(34,197,94,.12);
+--ylw:#eab308;--ylwBg:rgba(234,179,8,.12);
+--red:#ef4444;--redBg:rgba(239,68,68,.12);
+--chartGrid:rgba(255,255,255,.05);
+--shadow:0 4px 24px rgba(0,0,0,.35);
+}
+body.theme-light{
+--bg:#f3f5f9;--bg2:#ffffff;--bg3:#f7f8fb;--bg4:#eef0f5;
+--tx:#111827;--tx2:#6b7280;--tx3:#9ca3af;
+--ac:#4f46e5;--ac2:#6366f1;--acBg:rgba(79,70,229,.08);
+--bd:#e2e5ec;--bdL:#f0f1f5;
+--grn:#16a34a;--grnBg:rgba(22,163,74,.1);
+--ylw:#ca8a04;--ylwBg:rgba(202,138,4,.1);
+--red:#dc2626;--redBg:rgba(220,38,38,.1);
+--chartGrid:rgba(0,0,0,.06);
+--shadow:0 4px 24px rgba(0,0,0,.07);
+}
+/* Login */
+.login-screen{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:var(--bg);transition:opacity .3s}
+.login-screen.hidden{opacity:0;pointer-events:none}
+.login-card{width:100%;max-width:400px;margin:16px;background:var(--bg2);border:1px solid var(--bd);border-radius:20px;padding:44px 36px;text-align:center;box-shadow:var(--shadow)}
+.login-logo{width:60px;height:60px;margin:0 auto 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px}
+.login-title{font-size:22px;font-weight:800;margin-bottom:6px}
+.login-sub{font-size:14px;color:var(--tx2);margin-bottom:28px}
+.g-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;padding:13px 20px;background:var(--bg3);border:1px solid var(--bd);border-radius:12px;font-size:15px;font-weight:600;color:var(--tx);cursor:pointer;transition:.2s;font-family:inherit}
+.g-btn:hover{border-color:var(--ac);background:var(--acBg)}
+.g-btn:disabled{opacity:.5;cursor:wait}
+.g-btn svg{width:20px;height:20px;flex-shrink:0}
+.login-err{margin-top:14px;padding:10px 14px;background:var(--redBg);color:var(--red);border-radius:8px;font-size:13px;display:none}
+.login-err.show{display:block}
+.login-user{margin-top:12px;font-size:13px;color:var(--ac2);font-weight:600}
+.login-out{margin-top:12px;padding:10px;width:100%;background:var(--redBg);color:var(--red);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;display:none;font-family:inherit}
+/* Layout */
+.app{display:none;min-height:100vh}
+.app.show{display:block}
+.topbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar-logo{width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.topbar-title{font-size:17px;font-weight:700}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tabs{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px;border:1px solid var(--bd)}
+.tab-btn{padding:7px 16px;border:none;background:0 0;font-size:13px;font-weight:600;color:var(--tx2);border-radius:8px;cursor:pointer;transition:.15s;font-family:inherit;white-space:nowrap}
+.tab-btn:hover{color:var(--tx)}
+.tab-btn.active{background:var(--ac);color:#fff}
+.sel{appearance:none;padding:7px 28px 7px 12px;background:var(--bg3) url("data:image/svg+xml,%3Csvg fill='none' stroke='%238b93a7' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center/14px;border:1px solid var(--bd);border-radius:10px;font-size:13px;font-weight:600;color:var(--tx);cursor:pointer;font-family:inherit}
+.sel:focus{outline:none;border-color:var(--ac)}
+.icon-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--bd);border-radius:10px;color:var(--tx2);cursor:pointer;transition:.15s;flex-shrink:0}
+.icon-btn:hover{border-color:var(--ac);color:var(--ac)}
+.icon-btn svg{width:18px;height:18px}
+.save-ind{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg3);border-radius:99px;font-size:12px;font-weight:600;color:var(--tx2)}
+.save-dot{width:7px;height:7px;border-radius:50%;background:var(--tx3);transition:.3s}
+.save-ind.on .save-dot{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+/* Content */
+.content{max-width:1440px;margin:0 auto;padding:20px 16px 60px}
+.page{display:none;animation:fadeUp .3s ease}
+.page.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 1px solid transparent;
-  text-decoration: none;
-}
-
-.btn:active { transform: scale(0.98); }
-
-.btn-primary {
-  background: var(--accent-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--accent-hover);
-  box-shadow: var(--shadow-md);
-}
-
-.btn-secondary {
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  border-color: var(--text-tertiary);
-}
-
-.btn-danger {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border-color: transparent;
-}
-
-.btn-danger:hover {
-  background: var(--danger);
-  color: white;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.btn-ghost:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 13px;
-}
-
-.btn-icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-}
-
-/* Tables */
-.table-container {
-  overflow: auto;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.data-table th {
-  position: sticky;
-  top: 0;
-  background: var(--bg-tertiary);
-  padding: 12px 16px;
-  text-align: left;
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.data-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  vertical-align: middle;
-}
-
-.data-table tbody tr {
-  transition: background var(--transition-fast);
-}
-
-.data-table tbody tr:hover {
-  background: var(--bg-hover);
-}
-
-.data-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-/* Sticky first column */
-.data-table th:first-child,
-.data-table td:first-child {
-  position: sticky;
-  left: 0;
-  background: var(--bg-secondary);
-  z-index: 5;
-  border-right: 1px solid var(--border-color);
-}
-
-.data-table th:first-child {
-  background: var(--bg-tertiary);
-  z-index: 15;
-}
-
-/* Cell Input */
-.cell-input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  font-size: 13px;
-  font-family: inherit;
-  color: var(--text-primary);
-  text-align: center;
-  transition: all var(--transition-fast);
-}
-
-.cell-input:hover {
-  background: var(--bg-hover);
-}
-
-.cell-input:focus {
-  outline: none;
-  background: var(--bg-secondary);
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit;white-space:nowrap}
+.btn:hover{border-color:var(--tx3)}
+.btn-p{background:var(--ac);border-color:var(--ac);color:#fff}
+.btn-p:hover{background:var(--ac2);border-color:var(--ac2)}
+.btn-d{color:var(--red);border-color:transparent;background:var(--redBg)}
+.btn-d:hover{border-color:var(--red)}
+.btn-sm{padding:5px 10px;font-size:12px}
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+.card+.card{margin-top:16px}
+.card-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;cursor:pointer;user-select:none;flex-wrap:wrap}
+.card-hd:hover{background:var(--bg3)}
+.card-title{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card-title .arrow{font-size:11px;color:var(--tx3);transition:transform .3s}
+.card-actions{display:flex;gap:6px;flex-wrap:wrap}
+/* Month body accordion */
+.m-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .35s ease,opacity .35s ease;opacity:1}
+.m-body.closed{grid-template-rows:0fr;opacity:0}
+.m-inner{overflow:hidden}
+.m-content{padding:0 20px 20px}
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px}
+.st-box{background:var(--bg3);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden}
+.st-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--stColor,var(--ac));opacity:.7}
+.st-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx2);font-weight:700;margin-bottom:4px}
+.st-val{font-size:17px;font-weight:800}
+.st-sub{font-size:11px;color:var(--tx2);margin-top:3px}
+.st-accent{color:var(--ac2)}
+.st-forecast{background:var(--acBg);border-color:rgba(99,102,241,.2)}
+.st-forecast .st-val{color:var(--ac2)}
+/* Chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--bd);padding:5px 10px;border-radius:99px;font-size:11px;color:var(--tx2);font-weight:600;white-space:nowrap}
+.chip b{color:var(--tx);font-weight:700}
+.chip .plan{opacity:.5;font-weight:400}
 /* Badges */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.badge-success { background: var(--success-bg); color: var(--success); }
-.badge-warning { background: var(--warning-bg); color: var(--warning); }
-.badge-danger { background: var(--danger-bg); color: var(--danger); }
-.badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-
-/* Section Header */
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.section-title {
-  font-size: 18px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.section-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* Month Card */
-.month-card {
-  margin-bottom: 24px;
-}
-
-.month-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  cursor: pointer;
-  user-select: none;
-  transition: background var(--transition-fast);
-}
-
-.month-header:hover { background: var(--bg-hover); }
-
-.month-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.month-toggle {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  transition: transform var(--transition-normal);
-}
-
-.month-toggle.expanded { transform: rotate(180deg); }
-
-.month-name {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.month-stats {
-  display: flex;
-  gap: 24px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.month-stat {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.month-stat strong {
-  color: var(--text-primary);
-}
-
-.month-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-slow);
-}
-
-.month-body.expanded {
-  grid-template-rows: 1fr;
-}
-
-.month-body-inner {
-  overflow: hidden;
-}
-
-.month-content {
-  padding: 0 20px 20px;
-}
-
-/* Channel Grid */
-.channels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
-}
-
-.channel-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.channel-header {
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-}
-
-.channel-name {
-  font-weight: 600;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.channel-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.channel-body {
-  padding: 12px;
-}
-
-/* Mini Stats */
-.mini-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.mini-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-full);
-  font-size: 12px;
-}
-
-.mini-stat-label {
-  color: var(--text-secondary);
-}
-
-.mini-stat-value {
-  font-weight: 600;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  opacity: 0;
-  visibility: hidden;
-  transition: all var(--transition-normal);
-}
-
-.modal-overlay.active {
-  opacity: 1;
-  visibility: visible;
-}
-
-.modal {
-  width: 100%;
-  max-width: 520px;
-  max-height: calc(100vh - 40px);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-xl);
-  display: flex;
-  flex-direction: column;
-  transform: scale(0.95) translateY(10px);
-  transition: transform var(--transition-normal);
-}
-
-.modal-overlay.active .modal {
-  transform: scale(1) translateY(0);
-}
-
-.modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.modal-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.modal-close {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.modal-close:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.modal-body {
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-/* Form Elements */
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.form-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-primary);
-  transition: all var(--transition-fast);
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-/* Checkbox Grid */
-.checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
-}
-
-.checkbox-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-size: 13px;
-}
-
-.checkbox-item:hover {
-  border-color: var(--accent-primary);
-  background: var(--accent-light);
-}
-
-.checkbox-item input {
-  accent-color: var(--accent-primary);
-}
-
-/* Toast Notifications */
-.toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 2000;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.toast {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 20px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  animation: slideIn 0.3s ease;
-  min-width: 300px;
-}
-
-@keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-.toast-icon {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-}
-
-.toast-content {
-  flex: 1;
-}
-
-.toast-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.toast-message {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.toast-close {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
+.badge{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;min-width:38px}
+.b-ok{color:var(--grn);background:var(--grnBg)}
+.b-warn{color:var(--ylw);background:var(--ylwBg)}
+.b-bad{color:var(--red);background:var(--redBg)}
+.b-mut{color:var(--tx2);background:var(--bg4)}
+.trend-good{color:var(--grn);font-weight:700}
+.trend-warn{color:var(--ylw);font-weight:700}
+.trend-bad{color:var(--red);font-weight:700}
+.drr-good{color:var(--grn);font-weight:700;background:var(--grnBg);padding:2px 6px;border-radius:4px}
+.drr-warn{color:var(--ylw);font-weight:700;background:var(--ylwBg);padding:2px 6px;border-radius:4px}
+.drr-bad{color:var(--red);font-weight:700;background:var(--redBg);padding:2px 6px;border-radius:4px}
+/* Channels */
+.ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.ch-card{background:var(--bg3);border:1px solid var(--bd);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.ch-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ch-name{font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px}
+.ch-del{color:var(--red);cursor:pointer;opacity:.3;font-size:15px;transition:.15s;user-select:none}
+.ch-card:hover .ch-del{opacity:1}
+.add-met{color:var(--ac);cursor:pointer;font-size:11px;font-weight:600;background:var(--acBg);padding:2px 8px;border-radius:6px;opacity:.6;transition:.15s}
+.add-met:hover{opacity:1}
+.fin-btn{font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx2);cursor:pointer;font-weight:600;font-family:inherit;transition:.15s}
+.fin-btn.on{border-color:var(--ac);color:var(--ac);background:var(--acBg)}
+/* Table */
+.tbl-wrap{width:100%;overflow:auto;border-radius:12px;border:1px solid var(--bd);background:var(--bg2);max-height:72vh;-webkit-overflow-scrolling:touch}
+table.tbl{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:400px}
+.tbl th,.tbl td{border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);height:40px;padding:0 5px;vertical-align:middle;text-align:center;font-size:12px;color:var(--tx);white-space:nowrap}
+.tbl tr>*:last-child{border-right:none}
+.tbl tr:last-child>*{border-bottom:none}
+.tbl th{background:var(--bg3);color:var(--tx2);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;z-index:30}
+.c-sticky{width:88px;min-width:88px;position:sticky;left:0;z-index:20;background:var(--bg3);padding:0 8px!important;border-right:1px solid var(--bd)!important;box-shadow:2px 0 4px rgba(0,0,0,.04)}
+th.c-sticky{z-index:40!important;background:var(--bg3)}
+.c-type{width:64px;min-width:64px}
+.tbl td:not(.c-sticky):not(.c-type){min-width:88px}
+/* Cells */
+.ci{width:100%;border:none;background:0 0;text-align:center;font-family:'Inter',monospace;font-size:13px;color:var(--tx);padding:8px 2px;border-radius:6px;transition:.15s}
+.ci:hover{background:var(--bg4)}
+.ci:focus{background:var(--bg2);outline:1px solid var(--ac)}
+.ci::placeholder{color:var(--tx3)}
+.cpl-cell{opacity:.8;font-weight:800}
+/* Week rows */
+.wk-inner{display:flex;align-items:center;gap:4px;width:100%}
+.wk-toggle{background:0 0;border:none;color:var(--tx2);cursor:pointer;font-size:13px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:4px;padding:0}
+.wk-toggle:hover{background:var(--bg4);color:var(--tx)}
+.wk-title{flex:1;font-weight:700;font-size:12px;outline:none;border-radius:4px;padding:2px 4px;text-align:left}
+.wk-title:focus{background:var(--bg4);box-shadow:0 0 0 1px var(--ac)}
+.days-btn{background:0 0;border:1px solid transparent;color:var(--tx2);cursor:pointer;border-radius:4px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;opacity:.4;transition:.15s;margin-left:auto}
+.days-btn:hover{opacity:1;background:var(--bg4);color:var(--tx)}
+.days-btn.on{color:var(--ac);opacity:1;background:var(--acBg)}
+.bars{display:block;width:12px;height:10px;background:linear-gradient(to bottom,currentColor 2px,transparent 2px,transparent 4px,currentColor 4px,transparent 6px,transparent 8px,currentColor 8px)}
+.wk-collapsed{display:none}
+.day-row{display:none;background:rgba(128,128,128,.03)}
+.day-row.show{display:table-row;animation:fadeUp .25s ease}
+.day-lbl{padding-right:12px!important;font-size:11px;color:var(--tx2);font-family:monospace}
+.day-nm{color:var(--ac);font-weight:700;margin-right:3px}
+.spacer td{height:12px;background:var(--bdL);border:none!important;padding:0!important}
+/* Total */
+.total-card{background:var(--bg3);border-color:rgba(99,102,241,.15)}
+.total-card .c-sticky{background:var(--bg3)}
 /* Charts */
-.chart-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+.chart-box{background:var(--bg2);border:1px solid var(--bd);border-radius:16px;padding:20px}
+.chart-title{font-size:14px;font-weight:700;margin-bottom:14px}
+.chart-cv{position:relative;height:280px;width:100%}
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:99999;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:.2s;padding:16px}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg2);border:1px solid var(--bd);border-radius:18px;width:100%;max-width:500px;max-height:calc(100vh - 40px);padding:28px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow);transform:scale(.95);transition:.2s}
+.overlay.open .modal{transform:scale(1)}
+.modal h3{font-size:19px;font-weight:800}
+.m-field{display:flex;flex-direction:column;gap:8px}
+.m-field label{font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.04em}
+.m-input{padding:13px 14px;border:1px solid var(--bd);border-radius:12px;background:var(--bg3);color:var(--tx);font-size:15px;outline:none;font-family:inherit;transition:.15s}
+.m-input:focus{border-color:var(--ac)}
+.met-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:240px;overflow-y:auto;padding:8px;border:1px solid var(--bd);border-radius:12px;background:var(--bg)}
+.met-item{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;padding:9px 10px;border-radius:8px;color:var(--tx);user-select:none;transition:.1s}
+.met-item:hover{background:var(--bg3)}
+.met-item input{accent-color:var(--ac);width:15px;height:15px;cursor:pointer}
+.m-actions{display:flex;gap:10px;padding-top:10px;border-top:1px solid var(--bd)}
+.m-btn{flex:1;padding:13px;border-radius:12px;font-weight:700;cursor:pointer;border:none;font-size:14px;font-family:inherit;transition:.15s}
+.m-btn:active{transform:scale(.98)}
+.m-cancel{background:0 0;border:1px solid var(--bd);color:var(--tx2)}
+.m-cancel:hover{border-color:var(--tx);color:var(--tx)}
+.m-save{background:var(--ac);color:#fff}
+.m-save:hover{background:var(--ac2)}
+/* Toast */
+.toast-wrap{position:fixed;bottom:20px;right:20px;z-index:99998;display:flex;flex-direction:column;gap:10px}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--bg2);border:1px solid var(--bd);border-radius:12px;box-shadow:var(--shadow);font-size:13px;font-weight:600;animation:slideIn .3s ease;min-width:260px}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+/* Mobile */
+@media(max-width:768px){
+.topbar{padding:8px 12px}
+.topbar-title{font-size:15px}
+.tabs{overflow-x:auto;max-width:100%}
+.tab-btn{padding:6px 12px;font-size:12px}
+.content{padding:12px 10px 40px}
+.stats-row{grid-template-columns:1fr 1fr;gap:8px}
+.ch-grid{grid-template-columns:1fr}
+.chart-grid{grid-template-columns:1fr}
+.card-hd{padding:12px 14px}
+.m-content{padding:0 14px 14px}
+.tbl th{white-space:normal!important;word-break:break-word!important;height:auto!important;padding:8px 5px!important;line-height:1.15}
+.tbl td{white-space:nowrap!important}
+table.tbl{table-layout:auto!important;min-width:unset!important}
+.c-sticky{width:86px!important;min-width:86px!important}
+.c-type{width:56px!important;min-width:56px!important}
 }
-
-.chart-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px;
+@media(max-width:520px){
+.stats-row{grid-template-columns:1fr}
+.met-list{grid-template-columns:1fr}
+.modal{padding:20px}
 }
-
-.chart-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chart-container {
-  position: relative;
-  height: 280px;
-}
-
-/* Empty State */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-secondary);
-}
-
-.empty-state-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.empty-state-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.empty-state-text {
-  font-size: 14px;
-  margin-bottom: 24px;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE RESPONSIVE
-   ═══════════════════════════════════════════════════════════════ */
-@media (max-width: 1024px) {
-  .sidebar {
-    transform: translateX(-100%);
-  }
-  
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  
-  .main-content {
-    margin-left: 0;
-  }
-  
-  .menu-toggle {
-    display: flex;
-  }
-  
-  .sidebar-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 99;
-    opacity: 0;
-    visibility: hidden;
-    transition: all var(--transition-normal);
-  }
-  
-  .sidebar-overlay.active {
-    opacity: 1;
-    visibility: visible;
-  }
-}
-
-@media (max-width: 768px) {
-  .page-content {
-    padding: 16px;
-  }
-  
-  .kpi-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .chart-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .channels-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .month-stats {
-    display: none;
-  }
-  
-  .main-header {
-    padding: 0 16px;
-  }
-  
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .section-actions {
-    width: 100%;
-  }
-  
-  .section-actions .btn {
-    flex: 1;
-  }
-  
-  .modal {
-    max-height: calc(100vh - 20px);
-    margin: 10px;
-  }
-  
-  .toast-container {
-    left: 16px;
-    right: 16px;
-    bottom: 16px;
-  }
-  
-  .toast {
-    min-width: auto;
-  }
-}
-
-/* Utility Classes */
-.flex { display: flex; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.gap-2 { gap: 8px; }
-.gap-3 { gap: 12px; }
-.mb-3 { margin-bottom: 12px; }
-.mb-4 { margin-bottom: 16px; }
-.mt-4 { margin-top: 16px; }
-.text-secondary { color: var(--text-secondary); }
-.text-sm { font-size: 13px; }
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
-.hidden { display: none !important; }
 </style>
 </head>
-<body data-theme="light">
+<body class="theme-dark">
 
-<!-- ═══════════════════════════════════════════════════════════════
-     LOGIN SCREEN
-     ═══════════════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div class="login-screen" id="loginScreen">
-  <div class="login-card">
-    <div class="login-logo">📊</div>
-    <h1 class="login-title">KPI Dashboard</h1>
-    <p class="login-subtitle">Войдите для доступа к маркетинговой аналитике</p>
-    <button class="google-btn" id="googleLoginBtn" onclick="handleLogin()">
-      <svg viewBox="0 0 24 24">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-      <span id="loginBtnText">Войти через Google</span>
-    </button>
-    <div class="login-error" id="loginError"></div>
-    <div id="userInfo" style="margin-top: 16px; font-size: 13px; color: var(--text-secondary);"></div>
-    <button class="btn btn-secondary" id="logoutBtn" style="display: none; margin-top: 12px; width: 100%;" onclick="handleLogout()">
-      Выйти и сменить аккаунт
-    </button>
-  </div>
+<div class="login-card">
+<div class="login-logo">📊</div>
+<div class="login-title">KPI Dashboard</div>
+<p class="login-sub">Войдите через Google для доступа к аналитике</p>
+<button class="g-btn" id="gLoginBtn" onclick="doLogin()">
+<svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+<span id="gLoginTxt">Войти через Google</span>
+</button>
+<div class="login-err" id="loginErr"></div>
+<div class="login-user" id="loginUser"></div>
+<button class="login-out" id="loginOut" onclick="doLogout()">Выйти и сменить аккаунт</button>
+</div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     MAIN APP
-     ═══════════════════════════════════════════════════════════════ -->
-<div class="app-layout" id="appLayout" style="display: none;">
-  
-  <!-- Sidebar Overlay (Mobile) -->
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-  
-  <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-logo">📊</div>
-      <span class="sidebar-brand">KPI Dashboard</span>
-    </div>
-    
-    <nav class="sidebar-nav">
-      <div class="nav-section">
-        <div class="nav-section-title">Аналитика</div>
-        <a class="nav-item active" data-page="overview" onclick="navigateTo('overview')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
-          Обзор
-        </a>
-        <a class="nav-item" data-page="traffic" onclick="navigateTo('traffic')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-          Traffic
-        </a>
-        <a class="nav-item" data-page="smm" onclick="navigateTo('smm')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-          SMM
-        </a>
-        <a class="nav-item" data-page="organic" onclick="navigateTo('organic')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          Organic
-        </a>
-      </div>
-      
-      <div class="nav-section">
-        <div class="nav-section-title">Управление</div>
-        <a class="nav-item" data-page="settings" onclick="navigateTo('settings')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Настройки
-        </a>
-      </div>
-    </nav>
-    
-    <div class="sidebar-footer">
-      <div class="user-info" onclick="handleLogout()">
-        <div class="user-avatar" id="userAvatar">U</div>
-        <div class="user-details">
-          <div class="user-name" id="userName">User</div>
-          <div class="user-email" id="userEmail">email@example.com</div>
-        </div>
-        <button class="logout-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      </div>
-    </div>
-  </aside>
-  
-  <!-- Main Content -->
-  <main class="main-content">
-    <header class="main-header">
-      <div class="header-left">
-        <button class="menu-toggle" onclick="toggleSidebar()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-        <h1 class="page-title" id="pageTitle">Обзор</h1>
-      </div>
-      
-      <div class="header-right">
-        <select class="header-select" id="yearFilter" onchange="changeYear(this.value)">
-          <option value="all">Все года</option>
-        </select>
-        
-        <button class="icon-btn" onclick="toggleTheme()" title="Сменить тему">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="themeIcon"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        </button>
-        
-        <div class="save-status" id="saveStatus">
-          <div class="dot"></div>
-          <span id="statusText">Оффлайн</span>
-        </div>
-      </div>
-    </header>
-    
-    <div class="page-content">
-      <!-- Overview Page -->
-      <div class="page active" id="page-overview"></div>
-      
-      <!-- Traffic Page -->
-      <div class="page" id="page-traffic"></div>
-      
-      <!-- SMM Page -->
-      <div class="page" id="page-smm"></div>
-      
-      <!-- Organic Page -->
-      <div class="page" id="page-organic"></div>
-      
-      <!-- Settings Page -->
-      <div class="page" id="page-settings">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">⚙️ Настройки</h2>
-          </div>
-          <div class="card-body">
-            <div class="form-group">
-              <label class="form-label">Тема оформления</label>
-              <div class="flex gap-2">
-                <button class="btn btn-secondary" onclick="setTheme('light')">☀️ Светлая</button>
-                <button class="btn btn-secondary" onclick="setTheme('dark')">🌙 Тёмная</button>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Экспорт данных</label>
-              <div class="flex gap-2">
-                <button class="btn btn-primary" onclick="exportData('csv')">📥 Экспорт CSV</button>
-                <button class="btn btn-secondary" onclick="exportData('json')">📥 Экспорт JSON</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
+<!-- APP -->
+<div class="app" id="app">
+<div class="topbar">
+<div class="topbar-left">
+<div class="topbar-logo">📊</div>
+<span class="topbar-title">KPI Dashboard</span>
+</div>
+<div class="tabs">
+<button class="tab-btn active" onclick="goPage('traffic',this)">Traffic</button>
+<button class="tab-btn" onclick="goPage('smm',this)">SMM</button>
+<button class="tab-btn" onclick="goPage('organic',this)">Organic</button>
+<button class="tab-btn" onclick="goPage('overview',this)">Обзор</button>
+</div>
+<div class="topbar-right">
+<select class="sel" id="yearSel" onchange="setYear(this.value)"><option value="All">Все года</option></select>
+<button class="icon-btn" onclick="toggleTheme()" title="Тема" id="themeBtn">☀️</button>
+<button class="icon-btn" onclick="doLogout()" title="Выйти">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+</button>
+<div class="save-ind" id="saveInd"><div class="save-dot"></div><span id="saveTxt">...</span></div>
+</div>
+</div>
+<div class="content">
+<div class="page active" id="pg-traffic"><div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-p" onclick="addMonth()">+ Новый месяц</button></div><div id="trafficWrap"></div></div>
+<div class="page" id="pg-smm"><div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-p" onclick="addMonth()">+ Новый месяц</button></div><div id="smmWrap"></div></div>
+<div class="page" id="pg-organic"><div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-p" onclick="addMonth()">+ Новый месяц</button></div><div id="organicWrap"></div></div>
+<div class="page" id="pg-overview">
+<div class="card"><div class="card-hd" style="cursor:default"><div class="card-title">Сводка: <span id="ovMonth" style="color:var(--ac2);margin-left:6px">-</span></div></div>
+<div style="padding:0 20px 20px">
+<div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+<div class="st-box"><div class="st-label">Расход</div><div class="st-val" id="ovSpend">-</div><div class="st-sub" id="ovSpendP">План: -</div><div class="st-sub" id="ovSpendPc"></div></div>
+<div class="st-box"><div class="st-label">Лиды A+B</div><div class="st-val st-accent" id="ovLeads">-</div><div class="st-sub" id="ovLeadsP">План: -</div><div class="st-sub" id="ovLeadsPc"></div></div>
+<div class="st-box"><div class="st-label">CPL A+B</div><div class="st-val" id="ovCpl">-</div><div class="st-sub" id="ovCplPc">-</div></div>
+<div class="st-box"><div class="st-label">SMM: Лиды</div><div class="st-val st-accent" id="ovSmmL">-</div><div class="st-sub" id="ovSmmLP">План: -</div><div class="st-sub" id="ovSmmLPc"></div></div>
+<div class="st-box"><div class="st-label">SMM: Приток</div><div class="st-val" id="ovSmmS">-</div><div class="st-sub" id="ovSmmSP">План: -</div><div class="st-sub" id="ovSmmSPc"></div></div>
+<div class="st-box"><div class="st-label">SMM: Охват</div><div class="st-val" id="ovSmmR">-</div><div class="st-sub" id="ovSmmRP">План: -</div><div class="st-sub" id="ovSmmRPc"></div></div>
+</div></div></div>
+<div class="chart-grid">
+<div class="chart-box"><div class="chart-title">💰 Расход (₽)</div><div class="chart-cv"><canvas id="ch1"></canvas></div></div>
+<div class="chart-box"><div class="chart-title">👥 Лиды A+B</div><div class="chart-cv"><canvas id="ch2"></canvas></div></div>
+<div class="chart-box"><div class="chart-title">🎯 CPL A+B (₽)</div><div class="chart-cv"><canvas id="ch3"></canvas></div></div>
+<div class="chart-box"><div class="chart-title">📱 SMM: Лиды</div><div class="chart-cv"><canvas id="ch4"></canvas></div></div>
+<div class="chart-box"><div class="chart-title">📈 SMM: Приток</div><div class="chart-cv"><canvas id="ch5"></canvas></div></div>
+<div class="chart-box"><div class="chart-title">👁️ SMM: Охват</div><div class="chart-cv"><canvas id="ch6"></canvas></div></div>
+</div>
+</div>
+</div>
 </div>
 
-<!-- Toast Container -->
-<div class="toast-container" id="toastContainer"></div>
-
-<!-- Modal for Adding Channel -->
-<div class="modal-overlay" id="channelModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 class="modal-title" id="channelModalTitle">Добавить канал</h3>
-      <button class="modal-close" onclick="closeModal('channelModal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Название канала</label>
-        <input type="text" class="form-input" id="channelNameInput" placeholder="Например: Яндекс Директ">
-      </div>
-      <div class="form-group" id="metricsGroup" style="display: none;">
-        <label class="form-label">Метрики</label>
-        <div class="checkbox-grid" id="metricsCheckboxes"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('channelModal')">Отмена</button>
-      <button class="btn btn-primary" id="channelModalSave">Добавить</button>
-    </div>
-  </div>
+<!-- SMM MODAL -->
+<div class="overlay" id="smmOverlay">
+<div class="modal">
+<h3>Добавить SMM канал</h3>
+<div class="m-field"><label>Название</label><input class="m-input" id="smmNameInp" placeholder="Например: TikTok"></div>
+<div class="m-field"><label>Метрики</label><div class="met-list" id="smmMetList"></div></div>
+<div class="m-actions"><button class="m-btn m-cancel" onclick="closeSmmModal()">Отмена</button><button class="m-btn m-save" onclick="saveSmmChannel()">Добавить</button></div>
 </div>
+</div>
+
+<!-- ADD METRIC MODAL -->
+<div class="overlay" id="metOverlay">
+<div class="modal" style="max-width:400px">
+<h3>Добавить метрику</h3>
+<div class="m-field"><label>Выберите</label><div class="met-list" id="metList"></div></div>
+<div class="m-actions"><button class="m-btn m-cancel" onclick="closeMetModal()">Отмена</button><button class="m-btn m-save" onclick="saveMet()">Добавить</button></div>
+</div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// FIREBASE CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
-const firebaseConfig = {
-  apiKey: "AIzaSyAz6Xm8xnsv9djeW04-kLuct_-JzQN0YlA",
-  authDomain: "esteem-acc18.firebaseapp.com",
-  databaseURL: "https://esteem-acc18-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "esteem-acc18",
-  storageBucket: "esteem-acc18.firebasestorage.app",
-  messagingSenderId: "97815135490",
-  appId: "1:97815135490:web:e34238c3022dac4681ae1b"
-};
-
+/* ============ FIREBASE ============ */
+var firebaseConfig={apiKey:"AIzaSyAz6Xm8xnsv9djeW04-kLuct_-JzQN0YlA",authDomain:"esteem-acc18.firebaseapp.com",databaseURL:"https://esteem-acc18-default-rtdb.europe-west1.firebasedatabase.app",projectId:"esteem-acc18",storageBucket:"esteem-acc18.firebasestorage.app",messagingSenderId:"97815135490",appId:"1:97815135490:web:e34238c3022dac4681ae1b"};
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const auth = firebase.auth();
+var db=firebase.database(),auth=firebase.auth();
 
-// ═══════════════════════════════════════════════════════════════
-// GLOBAL STATE
-// ═══════════════════════════════════════════════════════════════
-let state = {
-  monthsData: [],
-  inputState: {},
-  currentPage: 'overview',
-  currentYear: 'all',
-  currentUser: null,
-  theme: localStorage.getItem('kpi-theme') || 'light',
-  charts: {},
-  debounceTimers: {}
-};
+/* ============ STATE ============ */
+var METRICS=["Охват","Посещения профиля","Чистый приток подписчиков","Клики по ссылке","Лиды","ERR","Просмотры постов","Показы","% Дочитывания и просмотров","Кол-во реакций","Просмотры"];
+var DEF_SMM=[{name:"Instagram",metrics:["Охват","Посещения профиля","Чистый приток подписчиков","Клики по ссылке","Лиды","ERR"]},{name:"Telegram",metrics:["Просмотры постов","Чистый приток подписчиков","Лиды","ERR"]},{name:"VK",metrics:["Охват","Посещения профиля","Чистый приток подписчиков","Лиды","ERR"]},{name:"Dzen",metrics:["Показы","% Дочитывания и просмотров","Кол-во реакций","Чистый приток подписчиков"]}];
+var DEF_ORG=["Яндекс","Google","Прямые заходы","Внутренние переходы"];
+var MRU=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+var WD=["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
+var months=[],inp={},isDark=true,curYear="All",charts={},smmModalM=-1,metModalM=-1,metModalC=-1,dbRef=null;
+var NF=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0});
+var NFP=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2});
 
-const MONTHS_RU = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-const WEEK_DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-
-const AVAILABLE_METRICS = [
-  "Охват", "Посещения профиля", "Чистый приток подписчиков",
-  "Клики по ссылке", "Лиды", "ERR", "Просмотры постов",
-  "Показы", "% Дочитывания и просмотров", "Кол-во реакций", "Просмотры"
-];
-
-const DEFAULT_SMM_CHANNELS = [
-  { name: 'Instagram', metrics: ['Охват', 'Посещения профиля', 'Чистый приток подписчиков', 'Клики по ссылке', 'Лиды', 'ERR'] },
-  { name: 'Telegram', metrics: ['Просмотры постов', 'Чистый приток подписчиков', 'Лиды', 'ERR'] },
-  { name: 'VK', metrics: ['Охват', 'Посещения профиля', 'Чистый приток подписчиков', 'Лиды', 'ERR'] },
-  { name: 'Dzen', metrics: ['Показы', '% Дочитывания и просмотров', 'Кол-во реакций', 'Чистый приток подписчиков'] }
-];
-
-const DEFAULT_ORGANIC_CHANNELS = ['Яндекс', 'Google', 'Прямые заходы', 'Внутренние переходы'];
-
-// ═══════════════════════════════════════════════════════════════
-// UTILITY FUNCTIONS
-// ═══════════════════════════════════════════════════════════════
-const formatNumber = (n) => {
-  if (n == null || n === '') return '-';
-  const num = Number(n);
-  if (isNaN(num)) return '-';
-  return new Intl.NumberFormat('ru-RU').format(num);
-};
-
-const formatMoney = (n) => {
-  if (n == null || n === '') return '-';
-  const num = Number(n);
-  if (isNaN(num) || num === 0) return '-';
-  return formatNumber(num) + ' ₽';
-};
-
-const formatPercent = (n) => {
-  if (n == null || n === '') return '-';
-  const num = parseFloat(String(n).replace(',', '.'));
-  if (isNaN(num)) return '-';
-  return num.toFixed(2).replace('.', ',') + '%';
-};
-
-const parseNum = (val) => {
-  if (val == null) return 0;
-  const s = String(val).replace(/[^\d-]/g, '');
-  const n = parseInt(s, 10);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const parsePercent = (val) => {
-  if (val == null) return 0;
-  const s = String(val).replace(',', '.').replace(/[^\d.\-]/g, '');
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const slugify = (text) => {
-  return btoa(encodeURIComponent(text)).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-};
-
-const isPercentMetric = (name) => {
-  const s = (name || '').toString().trim();
-  return s === 'ERR' || s.includes('%') || s.toLowerCase().includes('err');
-};
-
-const getMonthTimeProgress = (monthName) => {
-  if (!monthName) return 1;
-  const parts = monthName.split(' ');
-  const mName = parts[0];
-  const year = parseInt(parts[1]);
-  const mIdx = MONTHS_RU.indexOf(mName);
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth();
-  
-  if (year < curYear || (year === curYear && mIdx < curMonth)) return 1;
-  if (year > curYear || (year === curYear && mIdx > curMonth)) return 0;
-  
-  const totalDays = new Date(year, mIdx + 1, 0).getDate();
-  return Math.min(now.getDate() / totalDays, 1);
-};
-
-const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
-
-const generateWeeks = (year, monthIndex) => {
-  const dmax = daysInMonth(year, monthIndex);
-  const weeks = [];
-  let d = 1;
-  
-  while (d <= dmax) {
-    let days = [];
-    let dow = new Date(year, monthIndex, d).getDay();
-    let toSun = (7 - dow) % 7;
-    if (dow === 0) toSun = 0;
-    let end = Math.min(d + toSun, dmax);
-    
-    for (let i = d; i <= end; i++) {
-      days.push({ num: i, name: WEEK_DAYS[new Date(year, monthIndex, i).getDay()] });
-    }
-    
-    weeks.push({ title: `${d}–${end}`, days, notes: '' });
-    d = end + 1;
-  }
-  
-  return weeks;
-};
-
-const getDrrClass = (drr) => {
-  if (!drr || drr <= 0) return '';
-  if (drr <= 25) return 'badge-success';
-  if (drr <= 35) return 'badge-warning';
-  return 'badge-danger';
-};
-
-const getTrendClass = (actual, target) => {
-  if (target <= 0) return 'neutral';
-  const ratio = actual / target;
-  if (ratio >= 1) return 'up';
-  if (ratio >= 0.8) return 'neutral';
-  return 'down';
-};
-
-const getTrendIcon = (cls) => {
-  if (cls === 'up') return '↑';
-  if (cls === 'down') return '↓';
-  return '→';
-};
-
-// ═══════════════════════════════════════════════════════════════
-// AUTH FUNCTIONS
-// ═══════════════════════════════════════════════════════════════
-function handleLogin() {
-  const btn = document.getElementById('googleLoginBtn');
-  const btnText = document.getElementById('loginBtnText');
-  const errorEl = document.getElementById('loginError');
-  
-  btn.disabled = true;
-  btnText.textContent = 'Загрузка...';
-  errorEl.classList.remove('show');
-  
-  const provider = new firebase.auth.GoogleAuthProvider();
-  
-  auth.signInWithPopup(provider)
-    .catch((error) => {
-      btn.disabled = false;
-      btnText.textContent = 'Войти через Google';
-      
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-        return;
-      }
-      
-      errorEl.textContent = 'Ошибка: ' + error.message;
-      errorEl.classList.add('show');
-    });
-}
-
-function handleLogout() {
-  if (confirm('Выйти из аккаунта?')) {
-    auth.signOut().then(() => window.location.reload());
-  }
-}
-
-auth.onAuthStateChanged((user) => {
-  const loginScreen = document.getElementById('loginScreen');
-  const appLayout = document.getElementById('appLayout');
-  
-  if (user) {
-    state.currentUser = user;
-    
-    // Update user info in sidebar
-    document.getElementById('userName').textContent = user.displayName || 'User';
-    document.getElementById('userEmail').textContent = user.email;
-    document.getElementById('userAvatar').textContent = (user.displayName || 'U').charAt(0).toUpperCase();
-    
-    loginScreen.classList.add('hidden');
-    appLayout.style.display = 'flex';
-    
-    initApp();
-  } else {
-    loginScreen.classList.remove('hidden');
-    appLayout.style.display = 'none';
-  }
+/* ============ AUTH ============ */
+function doLogin(){
+var b=document.getElementById("gLoginBtn"),t=document.getElementById("gLoginTxt"),e=document.getElementById("loginErr");
+if(b){b.disabled=true;b.style.opacity=".5"}
+if(t)t.textContent="Загрузка...";
+if(e)e.classList.remove("show");
+var p=new firebase.auth.GoogleAuthProvider();
+auth.signInWithPopup(p).catch(function(err){
+if(b){b.disabled=false;b.style.opacity="1"}
+if(t)t.textContent="Войти через Google";
+if(err.code==="auth/popup-closed-by-user"||err.code==="auth/cancelled-popup-request")return;
+if(e){e.textContent="Ошибка: "+err.message;e.classList.add("show")}
 });
-
-// ═══════════════════════════════════════════════════════════════
-// APP INITIALIZATION
-// ═══════════════════════════════════════════════════════════════
-function initApp() {
-  applyTheme();
-  initFirebaseListener();
-  setupKeyboardShortcuts();
 }
+function doLogout(){if(confirm("Выйти?"))auth.signOut().then(function(){location.reload()})}
 
-function initFirebaseListener() {
-  db.ref('kpi_project').on('value', (snapshot) => {
-    const data = snapshot.val();
-    
-    if (data) {
-      state.monthsData = data.monthsData || [];
-      state.inputState = data.inputState || {};
-    } else {
-      // Create initial month if no data
-      if (state.monthsData.length === 0) {
-        addNewMonth(true);
-      }
-    }
-    
-    updateYearFilter();
-    renderCurrentPage();
-    updateSaveStatus(true);
-  }, (error) => {
-    console.error('Firebase error:', error);
-    updateSaveStatus(false);
-  });
+/* ============ HELPERS ============ */
+function pn(v){if(v==null)return 0;var s=String(v).replace(/[^\d-]/g,""),n=parseInt(s,10);return Number.isFinite(n)?n:0}
+function pp(v){if(v==null)return 0;var s=String(v).replace(",",".").replace(/[^\d.\-]/g,""),n=parseFloat(s);return Number.isFinite(n)?n:0}
+function fM(n){if(n==null||n==="")return"";n=Number(n);if(isNaN(n))return"";return n===0?"0 ₽":NF.format(n)+" ₽"}
+function fC(n){if(n==null||n==="")return"";n=Number(n);if(isNaN(n))return"";return n===0?"0":NF.format(n)}
+function fP(v){if(v==null||v==="")return"";var n=pp(v);if(!Number.isFinite(n))return"";return NFP.format(n)+"%"}
+function fR(n){n=+n||0;return n===0?"-":NF.format(n)+" ₽"}
+function fN(n){n=+n||0;return n===0?"-":NF.format(n)}
+function isPct(m){var s=(m||"").trim();return s==="ERR"||s.indexOf("%")>-1||s.toLowerCase().indexOf("err")>-1}
+function slug(t){return btoa(encodeURIComponent(t)).replace(/[^a-zA-Z0-9]/g,"").substring(0,10)}
+function drrCls(d){if(!d||d<=0)return"";return d<=25?"drr-good":d<=35?"drr-warn":"drr-bad"}
+function cplV(s,l){s=+s||0;l=+l||0;return s>0&&l>0?Math.round(s/l):0}
+function txt(id,v){var e=document.getElementById(id);if(e)e.innerText=v}
+function badgeEl(id,plan,fact,inv){var e=document.getElementById(id);if(!e)return;plan=+plan||0;fact=+fact||0;if(plan<=0){e.className="badge b-mut";e.innerText="-";return}var p=Math.round(fact/plan*100),r=fact/plan,c="b-mut";if(inv){c=r<=1?"b-ok":r<=1.2?"b-warn":"b-bad"}else{c=r>=1?"b-ok":r>=.8?"b-warn":"b-bad"}e.className="badge "+c;e.innerText=p+"%"}
+function dim(y,m){return new Date(y,m+1,0).getDate()}
+function genWeeks(y,m){var mx=dim(y,m),ws=[],d=1;while(d<=mx){var days=[],dw=new Date(y,m,d).getDay(),ts=(7-dw)%7;if(dw===0)ts=0;var end=Math.min(d+ts,mx);for(var i=d;i<=end;i++)days.push({num:i,name:WD[new Date(y,m,i).getDay()]});ws.push({title:d+"–"+end,days:days});d=end+1}return ws}
+function timeProgress(name){if(!name)return 1;var p=name.split(" "),mi=MRU.indexOf(p[0]),y=parseInt(p[1]),now=new Date();if(y<now.getFullYear()||(y===now.getFullYear()&&mi<now.getMonth()))return 1;if(y>now.getFullYear()||(y===now.getFullYear()&&mi>now.getMonth()))return 0;return Math.min(now.getDate()/dim(y,mi),1)}
+function reachMet(ms){for(var i=0;i<ms.length;i++){var l=ms[i].toLowerCase();if(l.indexOf("охват")>-1||l.indexOf("показы")>-1||l.indexOf("просмотры")>-1)return ms[i]}return null}
+function errMet(ms){for(var i=0;i<ms.length;i++){if(ms[i].toLowerCase().indexOf("err")>-1)return ms[i]}return null}
+function toast(msg,type){var w=document.getElementById("toasts"),t=document.createElement("div");t.className="toast";t.innerHTML=(type==="ok"?"✅ ":type==="err"?"❌ ":"ℹ️ ")+msg;w.appendChild(t);setTimeout(function(){t.remove()},4000)}
+
+/* ============ THEME ============ */
+function toggleTheme(){isDark=!isDark;document.body.className=isDark?"theme-dark":"theme-light";document.getElementById("themeBtn").textContent=isDark?"☀️":"🌙";if(document.getElementById("pg-overview").classList.contains("active"))renderOverview()}
+
+/* ============ NAV ============ */
+function goPage(p,btn){var pages=document.querySelectorAll(".page");for(var i=0;i<pages.length;i++)pages[i].classList.remove("active");document.getElementById("pg-"+p).classList.add("active");var btns=document.querySelectorAll(".tab-btn");for(var i=0;i<btns.length;i++)btns[i].classList.remove("active");if(btn)btn.classList.add("active");if(p==="overview")renderOverview()}
+function setYear(y){curYear=y;renderTraffic();renderSMM();renderOrganic();renderOverview()}
+
+/* ============ DATA ============ */
+function saveStruct(){db.ref("kpi_project/monthsData").set(months)}
+function addMonth(){var idx=months.length,y=2026+Math.floor(idx/12),m=idx%12,name=MRU[m]+" "+y,weeks=genWeeks(y,m);
+var tc=["Яндекс Директ"],sc=JSON.parse(JSON.stringify(DEF_SMM)),oc=DEF_ORG.slice();
+if(months.length>0){var pv=months[months.length-1];if(pv.channels)tc=pv.channels.slice();if(pv.smmChannels&&pv.smmChannels.length)sc=JSON.parse(JSON.stringify(pv.smmChannels));if(pv.organicChannels&&pv.organicChannels.length)oc=pv.organicChannels.slice()}
+if(y>2026||(y===2026&&m>=2)){var hasYT=false;for(var i=0;i<sc.length;i++){if(sc[i].name&&sc[i].name.toLowerCase()==="youtube")hasYT=true}if(!hasYT)sc.push({name:"YouTube",metrics:["Просмотры","Чистый приток подписчиков","ERR"]})}
+months.push({name:name,collapsed:false,channels:tc,smmChannels:sc,organicChannels:oc,weeks:weeks});
+renderTraffic();renderSMM();renderOrganic();saveStruct();toast("Месяц добавлен: "+name,"ok")}
+function delMonth(i){if(!confirm("Удалить месяц?"))return;cleanState(i);months[i]={_del:true};renderTraffic();renderSMM();renderOrganic();saveStruct()}
+function cleanState(mi,ci,type){var up={};Object.keys(inp).forEach(function(k){var del=false,mm=k.match(/(?:^|_)m(\d+)(?:_|$)/),cm=k.match(/(?:^|_)c(\d+)(?:_|$)/);var hm=mm&&parseInt(mm[1])===mi,hc=cm&&parseInt(cm[1])===ci;
+if(!type&&hm)del=true;
+else if(type==="tr"&&hm&&hc&&k.indexOf("smm_")!==0&&k.indexOf("org_")!==0)del=true;
+else if(type==="smm"&&hm&&hc&&k.indexOf("smm_")===0)del=true;
+else if(type==="org"&&hm&&hc&&k.indexOf("org_")===0)del=true;
+if(del){delete inp[k];up[k]=null}});
+if(Object.keys(up).length>0)db.ref("kpi_project/inputState").update(up)}
+function toggleMon(i){months[i].collapsed=!months[i].collapsed;saveStruct();renderTraffic();renderSMM();renderOrganic()}
+
+/* ============ YEAR FILTER ============ */
+function updYearSel(){var s=document.getElementById("yearSel");if(!s)return;var ys={};months.forEach(function(m){if(!m||m._del)return;var mt=m.name.match(/\d{4}/);if(mt)ys[mt[0]]=true});
+var h='<option value="All">Все года</option>';Object.keys(ys).sort().reverse().forEach(function(y){h+='<option value="'+y+'"'+(y===curYear?' selected':'')+'>'+y+'</option>'});s.innerHTML=h}
+
+/* ============ SMART RENDER ============ */
+function smartRender(cid,data,pfx,gen){var c=document.getElementById(cid);if(!c)return;
+for(var i=0;i<data.length;i++){var bid=pfx+"_b"+i;
+if(!data[i]||data[i]._del){var ex=document.getElementById(bid);if(ex)ex.remove();continue}
+var html=gen(data[i],i),bl=document.getElementById(bid);
+if(!bl){bl=document.createElement("div");bl.id=bid;bl.innerHTML=html;c.appendChild(bl)}
+else if(bl.innerHTML!==html){var ae=document.activeElement,aid=ae?ae.id:null,ss=ae?ae.selectionStart:0;bl.innerHTML=html;if(aid){var na=document.getElementById(aid);if(na){na.focus();try{na.setSelectionRange(ss,ss)}catch(e){}}}}
+var ym=data[i].name.match(/\d{4}/),yr=ym?ym[0]:"";bl.style.display=(curYear==="All"||curYear===yr)?"block":"none"}
+var ch=c.children;for(var j=ch.length-1;j>=0;j--){if(ch[j].id&&ch[j].id.indexOf(pfx+"_b")===0){var ix=parseInt(ch[j].id.split("_b")[1]);if(ix>=data.length)ch[j].remove()}}}
+
+/* ============ INPUT EVENTS ============ */
+var fbTimers={};
+function setupEvents(){
+var hInp=function(e){var el=e.target;if(!el.classList.contains("ci"))return;
+var id=el.dataset.id,kd=el.dataset.kind||"count";el.dataset.ed="1";
+var v=kd==="percent"?pp(el.value):pn(el.value);
+if(kd==="percent")v=dzenMagic(el,v);
+inp[id]=v;
+if(id.indexOf("smm_")===0)recalcSMM(id);else if(id.indexOf("org_")===0)recalcOrg(id);else recalc(id);
+if(fbTimers[id])clearTimeout(fbTimers[id]);
+fbTimers[id]=setTimeout(function(){db.ref("kpi_project/inputState/"+id).set(v)},500)};
+var hFoc=function(e){var el=e.target;if(!el.classList.contains("ci"))return;if(el.value.trim()==="")return;
+var kd=el.dataset.kind||"count";el.value=kd==="percent"?String(pp(el.value)):String(pn(el.value));
+setTimeout(function(){try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}},0)};
+var hBlur=function(e){var el=e.target;if(!el.classList.contains("ci"))return;
+var rv=el.value.trim(),id=el.dataset.id,kd=el.dataset.kind||"count";
+if(rv===""){el.value="";delete inp[id];db.ref("kpi_project/inputState/"+id).remove();if(id.indexOf("smm_")===0)recalcSMM(id);else if(id.indexOf("org_")===0)recalcOrg(id);else recalc(id);el.dataset.ed="0";return}
+var n;if(kd==="percent"){n=pp(rv);if(el.dataset.ed==="1")n=dzenMagic(el,n)}else n=pn(rv);
+el.dataset.ed="0";inp[id]=n;db.ref("kpi_project/inputState/"+id).set(n);
+el.value=kd==="money"?fM(n):kd==="percent"?fP(n):fC(n);
+if(id.indexOf("smm_")===0)recalcSMM(id);else if(id.indexOf("org_")===0)recalcOrg(id);else recalc(id)};
+["trafficWrap","smmWrap","organicWrap"].forEach(function(cid){var c=document.getElementById(cid);if(c){c.addEventListener("input",hInp);c.addEventListener("focusin",hFoc);c.addEventListener("focusout",hBlur)}})}
+
+function dzenMagic(el,val){if(!el||val==null||val==="")return val;
+var ch=(el.dataset.channel||"").toLowerCase(),mt=(el.dataset.metric||"").toLowerCase();
+if((ch.indexOf("dzen")>-1||ch.indexOf("дзен")>-1)&&(mt.indexOf("% дочитывания")>-1||mt.indexOf("err")>-1)){
+var id=el.dataset.id,mm=id.match(/_m(\d+)/),cm=id.match(/_c(\d+)/),wm=id.match(/_w(\d+)/),dm=id.match(/_d(\d+)/),tm=id.match(/_(plan|fact)$/);
+if(mm&&cm&&wm){var mI=mm[1],cI=cm[1],wI=wm[1],rk="";
+var chObj=months[mI]&&months[mI].smmChannels?months[mI].smmChannels[cI]:null;if(!chObj)return val;
+var rm=reachMet(chObj.metrics)||"Показы";
+if(dm)rk="smm_m"+mI+"_c"+cI+"_w"+wI+"_d"+dm[1]+"_"+slug(rm);
+else if(tm)rk="smm_m"+mI+"_c"+cI+"_w"+wI+"_"+slug(rm)+"_"+tm[1];
+var imp=inp[rk]||0;return imp>0?val/imp*100:0}}
+return val}
+
+/* ============ RENDER TRAFFIC ============ */
+function renderTraffic(){smartRender("trafficWrap",months,"tr",function(mon,mi){
+var chs=mon.channels||[],html="";
+html+='<div class="card"><div class="card-hd" onclick="toggleMon('+mi+')"><div class="card-title">'+mon.name+' <span class="arrow">'+(mon.collapsed?"▼":"▲")+'</span></div>';
+html+='<div class="card-actions" onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="addTrCh('+mi+')">+ Канал</button><button class="btn btn-sm btn-d" onclick="delMonth('+mi+')">Удалить</button></div></div>';
+html+='<div class="m-body'+(mon.collapsed?" closed":"")+'"><div class="m-inner"><div class="m-content">';
+html+='<div class="stats-row"><div class="st-box" style="--stColor:#6366f1"><div class="st-label">Расход</div><div class="st-val"><span id="m'+mi+'_fs">-</span> / <span id="m'+mi+'_ps" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="m'+mi+'_psp">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#22c55e"><div class="st-label">Лиды A+B</div><div class="st-val"><span id="m'+mi+'_fl" class="st-accent">-</span> / <span id="m'+mi+'_pl" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="m'+mi+'_plp">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#eab308"><div class="st-label">CPL A+B</div><div class="st-val"><span id="m'+mi+'_fc">-</span> / <span id="m'+mi+'_pc" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="m'+mi+'_pcp">-</div></div>';
+html+='<div class="st-box" style="--stColor:#8b5cf6"><div class="st-label">Выручка</div><div class="st-val" id="m'+mi+'_rev">-</div></div>';
+html+='<div class="st-box" style="--stColor:#ef4444"><div class="st-label">ДРР</div><div class="st-val" id="m'+mi+'_drr">-</div></div>';
+html+='<div class="st-box st-forecast"><div class="st-label">Прогноз лидов</div><div class="st-val" id="m'+mi+'_fcast">-</div><div class="st-sub">Конец месяца</div></div></div>';
+html+='<div class="ch-grid">';
+chs.forEach(function(ch,ci){if(!ch||ch==="__deleted__")return;
+var fin=!!inp["ui_fin_m"+mi+"_c"+ci];
+html+='<div class="ch-card"><div class="ch-top"><div><div class="ch-name">'+ch+' <span class="ch-del" onclick="delTrCh('+mi+','+ci+')">×</span></div>';
+html+='<div class="chips"><div class="chip">Расход: <b><span id="mc'+mi+'_'+ci+'_fs">-</span></b><span class="plan" id="mc'+mi+'_'+ci+'_ps">/ -</span><span id="mc'+mi+'_'+ci+'_psp"></span></div>';
+html+='<div class="chip">Лиды: <b><span id="mc'+mi+'_'+ci+'_fl">-</span></b><span class="plan" id="mc'+mi+'_'+ci+'_pl">/ -</span><span id="mc'+mi+'_'+ci+'_plp"></span></div>';
+html+='<div class="chip">CPL: <b><span id="mc'+mi+'_'+ci+'_fc">-</span></b><span class="plan" id="mc'+mi+'_'+ci+'_pc">/ -</span><span id="mc'+mi+'_'+ci+'_pcp"></span></div>';
+html+='<div class="chip">Выручка: <b><span id="mc'+mi+'_'+ci+'_rev">-</span></b></div>';
+html+='<div class="chip">ДРР: <b><span id="mc'+mi+'_'+ci+'_drr">-</span></b></div></div></div>';
+html+='<button class="fin-btn'+(fin?" on":"")+'" onclick="togFin('+mi+','+ci+')">💰 Финансы</button></div>';
+html+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="c-sticky">Период</th><th class="c-type">Тип</th><th>Расход</th><th>'+(fin?"Выручка":"Лиды A+B")+'</th><th>'+(fin?"ДРР":"CPL A+B")+'</th></tr></thead><tbody>';
+mon.weeks.forEach(function(wk,wi){
+var rid="m"+mi+"_w"+wi,wcol=!!inp["ui_wk_m"+mi+"_c"+ci+"_w"+wi],car=wcol?"▸":"▾";
+var uid="d_m"+mi+"_c"+ci+"_w"+wi,dExp=!!inp["ui_days_"+uid],dCls=dExp?"on":"",dShow=dExp?"show":"";
+html+='<tr><td class="c-sticky"><div class="wk-inner"><button class="wk-toggle" onclick="togWk('+mi+','+ci+','+wi+',\'tr\')">'+car+'</button><div class="wk-title" contenteditable onblur="updWk('+mi+','+wi+',this.innerText)">'+wk.title+'</div>';
+if((wk.days||[]).length>0)html+='<button class="days-btn '+dCls+'" onclick="togDays(\''+uid+'\')"><span class="bars"></span></button>';
+html+='</div></td><td class="c-type"></td><td colspan="3"></td></tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="opacity:.6;font-weight:800">ПЛАН</td>'+mkCells(rid,ci,"plan",fin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="font-weight:900">ФАКТ</td>'+mkCells(rid,ci,"fact",fin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky"></td><td class="c-type" style="font-weight:900">%</td>'+mkPCells(rid,ci,fin)+'</tr>';
+(wk.days||[]).forEach(function(dy,di){
+var did=rid+"_d"+di+"_c"+ci,c2,c3;
+if(fin){c2='<td><input class="ci" data-id="'+did+'_revenue" data-kind="money" value="'+fM(inp[did+"_revenue"])+'" placeholder="-"></td>';c3='<td class="cpl-cell" id="'+did+'_drr" style="font-size:11px">-</td>'}
+else{c2='<td><input class="ci" data-id="'+did+'_leads" data-kind="count" value="'+fC(inp[did+"_leads"])+'" placeholder="-"></td>';c3='<td class="cpl-cell" id="'+did+'_cpl" style="font-size:11px">-</td>'}
+html+='<tr class="day-row '+dShow+(wcol?" wk-collapsed":"")+'"><td class="c-sticky day-lbl"><span class="day-nm">'+dy.name+'</span>'+dy.num+'</td><td class="c-type" style="opacity:.3;font-size:10px">День</td>';
+html+='<td><input class="ci" data-id="'+did+'_spend" data-kind="money" value="'+fM(inp[did+"_spend"])+'" placeholder="-"></td>'+c2+c3+'</tr>'});
+html+='<tr class="spacer'+(wcol?" wk-collapsed":"")+'"><td colspan="5"></td></tr>'});
+html+='</tbody></table></div></div>'});
+/* Total */
+var tfin=!!inp["ui_fin_total_m"+mi];
+html+='<div class="ch-card total-card"><div class="ch-top"><div class="ch-name">📊 ВСЕГО</div><button class="fin-btn'+(tfin?" on":"")+'" onclick="togFinTotal('+mi+')">💰</button></div>';
+html+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="c-sticky">Период</th><th class="c-type">Тип</th><th>Расход</th><th>'+(tfin?"Выручка":"Лиды A+B")+'</th><th>'+(tfin?"ДРР":"CPL A+B")+'</th></tr></thead><tbody>';
+mon.weeks.forEach(function(wk,wi){
+var rid="m"+mi+"_w"+wi,wcol=!!inp["ui_wk_m"+mi+"_c-1_w"+wi],car=wcol?"▸":"▾";
+html+='<tr><td class="c-sticky"><div class="wk-inner"><button class="wk-toggle" onclick="togWk('+mi+',-1,'+wi+',\'tr\')">'+car+'</button><div class="wk-title">'+wk.title+'</div></div></td><td class="c-type"></td><td colspan="3"></td></tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="opacity:.6;font-weight:800">ПЛАН</td>'+mkTotCells(rid,"plan",tfin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="font-weight:900">ФАКТ</td>'+mkTotCells(rid,"fact",tfin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky"></td><td class="c-type" style="font-weight:900">%</td>'+mkTotPCells(rid,tfin)+'</tr>';
+html+='<tr class="spacer'+(wcol?" wk-collapsed":"")+'"><td colspan="5"></td></tr>'});
+html+='</tbody></table></div></div></div></div></div></div></div>';
+return html});
+recalcAll()}
+
+function mkCells(rid,ci,tp,fin){var id=rid+"_c"+ci,vs=inp[id+"_"+tp+"_spend"]||"";
+if(fin){var vr=inp[id+"_"+tp+"_revenue"]||"",ro=tp==="plan"?' disabled style="opacity:.3"':"";
+return'<td><input class="ci" data-id="'+id+"_"+tp+'_spend" data-kind="money" value="'+fM(vs)+'" placeholder="-"></td><td><input class="ci" data-id="'+id+"_"+tp+'_revenue" data-kind="money" value="'+fM(vr)+'" placeholder="-"'+ro+'></td><td class="cpl-cell" id="'+id+"_"+tp+'_drr">-</td>'}
+var vl=inp[id+"_"+tp+"_leads"]||"";
+return'<td><input class="ci" data-id="'+id+"_"+tp+'_spend" data-kind="money" value="'+fM(vs)+'" placeholder="-"></td><td><input class="ci" data-id="'+id+"_"+tp+'_leads" data-kind="count" value="'+fC(vl)+'" placeholder="-"></td><td class="cpl-cell" id="'+id+"_"+tp+'_cpl">-</td>'}
+function mkTotCells(rid,tp,fin){if(fin)return'<td class="ci" style="font-weight:900" id="'+rid+'_t_'+tp+'_s">-</td><td class="ci" style="font-weight:900" id="'+rid+'_t_'+tp+'_r">-</td><td class="ci cpl-cell" style="font-weight:900" id="'+rid+'_t_'+tp+'_d">-</td>';
+return'<td class="ci" style="font-weight:900" id="'+rid+'_t_'+tp+'_s">-</td><td class="ci" style="font-weight:900" id="'+rid+'_t_'+tp+'_l">-</td><td class="ci cpl-cell" style="font-weight:900" id="'+rid+'_t_'+tp+'_c">-</td>'}
+function mkPCells(rid,ci,fin){if(fin)return'<td><div id="'+rid+'_c'+ci+'_ps" class="badge b-mut">-</div></td><td><div class="badge b-mut">-</div></td><td><div class="badge b-mut">-</div></td>';
+return'<td><div id="'+rid+'_c'+ci+'_ps" class="badge b-mut">-</div></td><td><div id="'+rid+'_c'+ci+'_pl" class="badge b-mut">-</div></td><td><div id="'+rid+'_c'+ci+'_pc" class="badge b-mut">-</div></td>'}
+function mkTotPCells(rid,fin){if(fin)return'<td><div id="'+rid+'_tps" class="badge b-mut">-</div></td><td><div class="badge b-mut">-</div></td><td><div class="badge b-mut">-</div></td>';
+return'<td><div id="'+rid+'_tps" class="badge b-mut">-</div></td><td><div id="'+rid+'_tpl" class="badge b-mut">-</div></td><td><div id="'+rid+'_tpc" class="badge b-mut">-</div></td>'}
+
+function togWk(mi,ci,wi){var k="ui_wk_m"+mi+"_c"+ci+"_w"+wi;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderTraffic();renderSMM()}
+function togDays(uid){var k="ui_days_"+uid;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderTraffic();renderSMM();renderOrganic()}
+function togFin(mi,ci){var k="ui_fin_m"+mi+"_c"+ci;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderTraffic()}
+function togFinTotal(mi){var k="ui_fin_total_m"+mi;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderTraffic()}
+function addTrCh(mi){var n=prompt("Название канала:");if(n){months[mi].channels.push(n);renderTraffic();saveStruct()}}
+function delTrCh(mi,ci){if(!confirm("Удалить канал?"))return;cleanState(mi,ci,"tr");months[mi].channels[ci]="__deleted__";renderTraffic();saveStruct()}
+function updWk(mi,wi,t){months[mi].weeks[wi].title=t;saveStruct()}
+
+/* ============ RENDER SMM ============ */
+function renderSMM(){smartRender("smmWrap",months,"smm",function(mon,mi){
+var html='<div class="card"><div class="card-hd" onclick="toggleMon('+mi+')"><div class="card-title">'+mon.name+' <span class="arrow">'+(mon.collapsed?"▼":"▲")+'</span></div>';
+html+='<div class="card-actions" onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="openSmmModal('+mi+')">+ Канал</button><button class="btn btn-sm btn-d" onclick="delMonth('+mi+')">Удалить</button></div></div>';
+html+='<div class="m-body'+(mon.collapsed?" closed":"")+'"><div class="m-inner"><div class="m-content">';
+html+='<div class="stats-row"><div class="st-box" style="--stColor:#6366f1"><div class="st-label">Охват</div><div class="st-val"><span id="sm'+mi+'_rf">-</span> / <span id="sm'+mi+'_rp" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="sm'+mi+'_rpct">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#22c55e"><div class="st-label">Лиды</div><div class="st-val"><span id="sm'+mi+'_lf" class="st-accent">-</span> / <span id="sm'+mi+'_lp" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="sm'+mi+'_lpct">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#eab308"><div class="st-label">ERR</div><div class="st-val"><span id="sm'+mi+'_ef">-</span> / <span id="sm'+mi+'_ep" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="sm'+mi+'_epct">-</div></div></div>';
+html+='<div style="display:flex;flex-direction:column;gap:14px">';
+(mon.smmChannels||[]).forEach(function(ch,ci){if(!ch||ch._del)return;
+html+='<div class="ch-card"><div class="ch-top"><div><div class="ch-name">'+ch.name+' <span class="add-met" onclick="openMetModal('+mi+','+ci+')">+ Метрика</span><span class="ch-del" onclick="delSmmCh('+mi+','+ci+')">×</span></div>';
+html+='<div class="chips">';
+ch.metrics.forEach(function(mt){var sg=slug(mt);
+html+='<div class="chip">'+mt+': <b style="color:var(--ac2)"><span id="smf'+mi+'_'+ci+'_'+sg+'">-</span></b><span class="plan" id="smp'+mi+'_'+ci+'_'+sg+'">/ -</span><span id="smpc'+mi+'_'+ci+'_'+sg+'"></span></div>'});
+html+='</div></div></div>';
+html+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="c-sticky">Период</th><th class="c-type">Тип</th>';
+ch.metrics.forEach(function(mt){html+='<th>'+mt+' <span style="color:var(--red);cursor:pointer;opacity:0" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0" onclick="delSmmMet('+mi+','+ci+',\''+mt+'\')">×</span></th>'});
+html+='</tr></thead><tbody>';
+mon.weeks.forEach(function(wk,wi){
+var wcol=!!inp["ui_wk_m"+mi+"_c"+ci+"_w"+wi+"_s"],car=wcol?"▸":"▾";
+var uid="smm_d_m"+mi+"_c"+ci+"_w"+wi,dExp=!!inp["ui_days_"+uid],dCls=dExp?"on":"",dShow=dExp?"show":"";
+html+='<tr><td class="c-sticky"><div class="wk-inner"><button class="wk-toggle" onclick="togWkS('+mi+','+ci+','+wi+')">'+car+'</button><div class="wk-title" style="pointer-events:none">'+wk.title+'</div>';
+if((wk.days||[]).length>0)html+='<button class="days-btn '+dCls+'" onclick="togDays(\''+uid+'\')"><span class="bars"></span></button>';
+html+='</div></td><td class="c-type"></td>';ch.metrics.forEach(function(){html+='<td></td>'});html+='</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="opacity:.6;font-weight:800">ПЛАН</td>'+mkSmmCells(mi,ci,wi,"plan",ch)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="font-weight:900">ФАКТ</td>'+mkSmmCells(mi,ci,wi,"fact",ch)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky"></td><td class="c-type" style="font-weight:900">%</td>'+mkSmmPCells(mi,ci,wi,ch.metrics)+'</tr>';
+(wk.days||[]).forEach(function(dy,di){
+html+='<tr class="day-row '+dShow+(wcol?" wk-collapsed":"")+'"><td class="c-sticky day-lbl"><span class="day-nm">'+dy.name+'</span>'+dy.num+'</td><td class="c-type" style="opacity:.3;font-size:10px">День</td>'+mkSmmDayCells(mi,ci,wi,di,ch)+'</tr>'});
+html+='<tr class="spacer'+(wcol?" wk-collapsed":"")+'"><td colspan="'+(2+ch.metrics.length)+'"></td></tr>'});
+html+='</tbody></table></div></div>'});
+html+='</div></div></div></div></div>';
+return html});
+recalcAllSMM()}
+function togWkS(mi,ci,wi){var k="ui_wk_m"+mi+"_c"+ci+"_w"+wi+"_s";inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderSMM()}
+function mkSmmCells(mi,ci,wi,tp,ch){var h="";ch.metrics.forEach(function(mt){var kd=isPct(mt)?"percent":"count",key="smm_m"+mi+"_c"+ci+"_w"+wi+"_"+slug(mt)+"_"+tp,v=inp[key];
+h+='<td><input class="ci" data-id="'+key+'" data-kind="'+kd+'" data-channel="'+ch.name+'" data-metric="'+mt+'" value="'+(kd==="percent"?fP(v):fC(v))+'" placeholder="-"></td>'});return h}
+function mkSmmDayCells(mi,ci,wi,di,ch){var h="";ch.metrics.forEach(function(mt){var kd=isPct(mt)?"percent":"count",key="smm_m"+mi+"_c"+ci+"_w"+wi+"_d"+di+"_"+slug(mt),v=inp[key];
+h+='<td><input class="ci" data-id="'+key+'" data-kind="'+kd+'" data-channel="'+ch.name+'" data-metric="'+mt+'" value="'+(kd==="percent"?fP(v):fC(v))+'" placeholder="-"></td>'});return h}
+function mkSmmPCells(mi,ci,wi,mets){var h="";mets.forEach(function(mt){h+='<td><div id="smmp'+mi+'_'+ci+'_'+wi+'_'+slug(mt)+'" class="badge b-mut">-</div></td>'});return h}
+
+/* SMM Modals */
+function openSmmModal(mi){smmModalM=mi;document.getElementById("smmNameInp").value="";var l=document.getElementById("smmMetList");l.innerHTML="";
+METRICS.forEach(function(m){var lb=document.createElement("label");lb.className="met-item";lb.innerHTML='<input type="checkbox" value="'+m+'"> '+m;l.appendChild(lb)});
+document.getElementById("smmOverlay").classList.add("open")}
+function closeSmmModal(){document.getElementById("smmOverlay").classList.remove("open");smmModalM=-1}
+function saveSmmChannel(){var nm=document.getElementById("smmNameInp").value.trim();if(!nm){toast("Введите название","err");return}
+var sel=[];document.querySelectorAll("#smmMetList input:checked").forEach(function(cb){sel.push(cb.value)});
+if(sel.length===0){toast("Выберите метрики","err");return}
+if(smmModalM>-1){if(!months[smmModalM].smmChannels)months[smmModalM].smmChannels=[];months[smmModalM].smmChannels.push({name:nm,metrics:sel});renderSMM();closeSmmModal();saveStruct();toast("Канал добавлен: "+nm,"ok")}}
+function delSmmCh(mi,ci){if(!confirm("Удалить SMM канал?"))return;cleanState(mi,ci,"smm");months[mi].smmChannels[ci]={_del:true};renderSMM();saveStruct()}
+function delSmmMet(mi,ci,mt){if(!confirm('Удалить "'+mt+'"?'))return;var idx=months[mi].smmChannels[ci].metrics.indexOf(mt);if(idx>-1){months[mi].smmChannels[ci].metrics.splice(idx,1);renderSMM();saveStruct()}}
+function openMetModal(mi,ci){metModalM=mi;metModalC=ci;var ch=months[mi].smmChannels[ci],cur={};ch.metrics.forEach(function(m){cur[m]=true});
+var l=document.getElementById("metList");l.innerHTML="";var avail=METRICS.filter(function(m){return!cur[m]});
+if(avail.length===0){l.innerHTML='<div style="color:var(--tx2);font-size:12px">Все метрики добавлены</div>'}
+else{avail.forEach(function(m){var lb=document.createElement("label");lb.className="met-item";lb.innerHTML='<input type="radio" name="nmet" value="'+m+'"> '+m;l.appendChild(lb)})}
+document.getElementById("metOverlay").classList.add("open")}
+function closeMetModal(){document.getElementById("metOverlay").classList.remove("open");metModalM=-1;metModalC=-1}
+function saveMet(){var s=document.querySelector('input[name="nmet"]:checked');if(!s)return;months[metModalM].smmChannels[metModalC].metrics.push(s.value);renderSMM();closeMetModal();saveStruct()}
+
+/* ============ RENDER ORGANIC ============ */
+function renderOrganic(){smartRender("organicWrap",months,"org",function(mon,mi){
+var chs=mon.organicChannels||[],html="";
+html+='<div class="card"><div class="card-hd" onclick="toggleMon('+mi+')"><div class="card-title">'+mon.name+' <span class="arrow">'+(mon.collapsed?"▼":"▲")+'</span></div>';
+html+='<div class="card-actions" onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="addOrgCh('+mi+')">+ Канал</button><button class="btn btn-sm btn-d" onclick="delMonth('+mi+')">Удалить</button></div></div>';
+html+='<div class="m-body'+(mon.collapsed?" closed":"")+'"><div class="m-inner"><div class="m-content">';
+html+='<div class="stats-row"><div class="st-box" style="--stColor:#6366f1"><div class="st-label">Переходы</div><div class="st-val"><span id="og'+mi+'_fv">-</span> / <span id="og'+mi+'_pv" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="og'+mi+'_vpct">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#22c55e"><div class="st-label">Лиды</div><div class="st-val"><span id="og'+mi+'_fl" class="st-accent">-</span> / <span id="og'+mi+'_pl" style="opacity:.5;font-size:13px">-</span></div><div class="st-sub" id="og'+mi+'_lpct">0%</div></div>';
+html+='<div class="st-box" style="--stColor:#8b5cf6"><div class="st-label">Выручка</div><div class="st-val" id="og'+mi+'_rev">-</div></div></div>';
+html+='<div class="ch-grid">';
+chs.forEach(function(ch,ci){if(!ch||ch==="__deleted__")return;
+var fin=!!inp["ui_ofin_m"+mi+"_c"+ci];
+html+='<div class="ch-card"><div class="ch-top"><div><div class="ch-name">'+ch+' <span class="ch-del" onclick="delOrgCh('+mi+','+ci+')">×</span></div>';
+html+='<div class="chips"><div class="chip">Переходы: <b><span id="ogc'+mi+'_'+ci+'_fv">-</span></b><span class="plan" id="ogc'+mi+'_'+ci+'_pv">/ -</span></div>';
+html+='<div class="chip">Лиды: <b><span id="ogc'+mi+'_'+ci+'_fl">-</span></b><span class="plan" id="ogc'+mi+'_'+ci+'_pl">/ -</span></div>';
+html+='<div class="chip">Выручка: <b><span id="ogc'+mi+'_'+ci+'_rev">-</span></b></div></div></div>';
+html+='<button class="fin-btn'+(fin?" on":"")+'" onclick="togOFin('+mi+','+ci+')">💰</button></div>';
+html+='<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="c-sticky">Период</th><th class="c-type">Тип</th><th>Переходы</th><th>Лиды</th><th>'+(fin?"Выручка":"")+'</th></tr></thead><tbody>';
+mon.weeks.forEach(function(wk,wi){
+var rid="og_m"+mi+"_w"+wi,wcol=!!inp["ui_owk_m"+mi+"_c"+ci+"_w"+wi],car=wcol?"▸":"▾";
+var uid="org_m"+mi+"_c"+ci+"_w"+wi,dExp=!!inp["ui_days_"+uid],dCls=dExp?"on":"",dShow=dExp?"show":"";
+html+='<tr><td class="c-sticky"><div class="wk-inner"><button class="wk-toggle" onclick="togOWk('+mi+','+ci+','+wi+')">'+car+'</button><div class="wk-title" style="pointer-events:none">'+wk.title+'</div>';
+if((wk.days||[]).length>0)html+='<button class="days-btn '+dCls+'" onclick="togDays(\''+uid+'\')"><span class="bars"></span></button>';
+html+='</div></td><td class="c-type"></td><td colspan="3"></td></tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="opacity:.6;font-weight:800">ПЛАН</td>'+mkOrgCells(rid,ci,"plan",fin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky" style="border-bottom:none"></td><td class="c-type" style="font-weight:900">ФАКТ</td>'+mkOrgCells(rid,ci,"fact",fin)+'</tr>';
+html+='<tr class="'+(wcol?"wk-collapsed":"")+'"><td class="c-sticky"></td><td class="c-type" style="font-weight:900">%</td><td><div id="'+rid+'_c'+ci+'_pv" class="badge b-mut">-</div></td><td><div id="'+rid+'_c'+ci+'_plb" class="badge b-mut">-</div></td><td></td></tr>';
+(wk.days||[]).forEach(function(dy,di){
+var did=rid+"_d"+di+"_c"+ci;
+var c3=fin?'<td><input class="ci" data-id="'+did+'_revenue" data-kind="money" value="'+fM(inp[did+"_revenue"])+'" placeholder="-"></td>':'<td></td>';
+html+='<tr class="day-row '+dShow+(wcol?" wk-collapsed":"")+'"><td class="c-sticky day-lbl"><span class="day-nm">'+dy.name+'</span>'+dy.num+'</td><td class="c-type" style="opacity:.3;font-size:10px">День</td>';
+html+='<td><input class="ci" data-id="'+did+'_visits" data-kind="count" value="'+fC(inp[did+"_visits"])+'" placeholder="-"></td>';
+html+='<td><input class="ci" data-id="'+did+'_leads" data-kind="count" value="'+fC(inp[did+"_leads"])+'" placeholder="-"></td>'+c3+'</tr>'});
+html+='<tr class="spacer'+(wcol?" wk-collapsed":"")+'"><td colspan="5"></td></tr>'});
+html+='</tbody></table></div></div>'});
+html+='</div></div></div></div></div>';
+return html});
+recalcAllOrg()}
+function mkOrgCells(rid,ci,tp,fin){var id=rid+"_c"+ci,vv=inp[id+"_"+tp+"_visits"]||"",vl=inp[id+"_"+tp+"_leads"]||"";
+if(fin){var vr=inp[id+"_"+tp+"_revenue"]||"",ro=tp==="plan"?' disabled style="opacity:.3"':"";
+return'<td><input class="ci" data-id="'+id+"_"+tp+'_visits" data-kind="count" value="'+fC(vv)+'" placeholder="-"></td><td><input class="ci" data-id="'+id+"_"+tp+'_leads" data-kind="count" value="'+fC(vl)+'" placeholder="-"></td><td><input class="ci" data-id="'+id+"_"+tp+'_revenue" data-kind="money" value="'+fM(vr)+'" placeholder="-"'+ro+'></td>'}
+return'<td><input class="ci" data-id="'+id+"_"+tp+'_visits" data-kind="count" value="'+fC(vv)+'" placeholder="-"></td><td><input class="ci" data-id="'+id+"_"+tp+'_leads" data-kind="count" value="'+fC(vl)+'" placeholder="-"></td><td></td>'}
+function togOWk(mi,ci,wi){var k="ui_owk_m"+mi+"_c"+ci+"_w"+wi;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderOrganic()}
+function togOFin(mi,ci){var k="ui_ofin_m"+mi+"_c"+ci;inp[k]=!inp[k];db.ref("kpi_project/inputState/"+k).set(inp[k]);renderOrganic()}
+function addOrgCh(mi){var n=prompt("Название канала:");if(n){months[mi].organicChannels.push(n);renderOrganic();saveStruct()}}
+function delOrgCh(mi,ci){if(!confirm("Удалить канал?"))return;cleanState(mi,ci,"org");months[mi].organicChannels[ci]="__deleted__";renderOrganic();saveStruct()}
+
+/* ============ CALC TRAFFIC ============ */
+function recalc(id){var ps=id.split("_"),mi=-1,wi=-1,ci=-1;
+if(id.indexOf("_d")>-1){ps.forEach(function(p){if(p.charAt(0)==="m"&&!isNaN(parseInt(p.substr(1))))mi=parseInt(p.substr(1));if(p.charAt(0)==="w"&&!isNaN(parseInt(p.substr(1))))wi=parseInt(p.substr(1));if(p.charAt(0)==="c"&&!isNaN(parseInt(p.substr(1))))ci=parseInt(p.substr(1))});calcDays2Wk(mi,wi,ci)}
+else{var mk=ps[0],wk=ps[1],ck=ps[2];if(mk&&wk&&ck){mi=parseInt(mk.replace("m",""));wi=parseInt(wk.replace("w",""));ci=parseInt(ck.replace("c",""));calcDays2Wk(mi,wi,ci)}}
+if(mi>=0&&wi>=0&&ci>=0){calcRow("m"+mi+"_w"+wi+"_c"+ci);calcWkTot("m"+mi,"w"+wi);calcChGrand(mi,ci);calcGrand("m"+mi)}}
+function calcDays2Wk(mi,wi,ci){var mon=months[mi];if(!mon||mon._del)return;var wk=mon.weeks[wi];if(!wk||!wk.days)return;
+var days=wk.days,rid="m"+mi+"_w"+wi,ps=inp[rid+"_c"+ci+"_plan_spend"]||0,pl=inp[rid+"_c"+ci+"_plan_leads"]||0;
+var pcpl=ps>0&&pl>0?ps/pl:0,dTarget=pl>0?pl/days.length:0,tol=.2,ss=0,sl=0,sr=0;
+days.forEach(function(d,di){var did=rid+"_d"+di+"_c"+ci;
+var vs=inp[did+"_spend"]||0,vl=inp[did+"_leads"]||0,vr=inp[did+"_revenue"]||0;ss+=vs;sl+=vl;sr+=vr;
+var el=document.getElementById(did+"_cpl");
+if(el){if(vl>0){var dc=Math.round(vs/vl),r=pcpl>0?dc/pcpl:0;var cls=r<=1?"b-ok":r<=1.2?"b-warn":"b-bad";el.innerHTML='<span class="badge '+cls+'">'+fM(dc)+'</span>'}
+else el.innerHTML=vs>0?'<span class="badge b-bad" style="font-size:9px">0 лидов</span>':"-";
 }
+var ed=document.getElementById(did+"_drr");if(ed&&vr>0){var drr=vs/vr*100;ed.innerHTML='<span class="'+drrCls(drr)+'">'+NF.format(drr)+'%</span>'}});
+inp[rid+"_c"+ci+"_fact_spend"]=ss;inp[rid+"_c"+ci+"_fact_leads"]=sl;inp[rid+"_c"+ci+"_fact_revenue"]=sr}
+function calcRow(id){var ps=inp[id+"_plan_spend"]||0,pl=inp[id+"_plan_leads"]||0,fs=inp[id+"_fact_spend"]||0,fl=inp[id+"_fact_leads"]||0;
+txt(id+"_plan_cpl",fR(cplV(ps,pl)));var efc=document.getElementById(id+"_fact_cpl");if(efc)efc.innerHTML=fR(cplV(fs,fl));
+badgeEl(id+"_ps",ps,fs,true);badgeEl(id+"_pl",pl,fl);badgeEl(id+"_pc",cplV(ps,pl),cplV(fs,fl),true)}
+function calcWkTot(m,w){var s={ps:0,pl:0,fs:0,fl:0,fr:0},mi=parseInt(m.replace("m",""));if(!months[mi]||months[mi]._del)return;
+(months[mi].channels||[]).forEach(function(_,i){var id=m+"_"+w+"_c"+i;s.ps+=inp[id+"_plan_spend"]||0;s.pl+=inp[id+"_plan_leads"]||0;s.fs+=inp[id+"_fact_spend"]||0;s.fl+=inp[id+"_fact_leads"]||0;s.fr+=inp[id+"_fact_revenue"]||0});
+txt(m+"_"+w+"_t_plan_s",fR(s.ps));txt(m+"_"+w+"_t_plan_l",fN(s.pl));txt(m+"_"+w+"_t_fact_s",fR(s.fs));txt(m+"_"+w+"_t_fact_l",fN(s.fl));
+txt(m+"_"+w+"_t_plan_c",fR(cplV(s.ps,s.pl)));var e=document.getElementById(m+"_"+w+"_t_fact_c");if(e)e.innerHTML=fR(cplV(s.fs,s.fl));
+badgeEl(m+"_"+w+"_tps",s.ps,s.fs,true);badgeEl(m+"_"+w+"_tpl",s.pl,s.fl);badgeEl(m+"_"+w+"_tpc",cplV(s.ps,s.pl),cplV(s.fs,s.fl),true);
+txt(m+"_"+w+"_t_fact_r",fR(s.fr));var ed=document.getElementById(m+"_"+w+"_t_fact_d");if(ed){if(s.fr>0){var drr=s.fs/s.fr*100;ed.innerHTML='<span class="'+drrCls(drr)+'">'+NF.format(drr)+'%</span>'}else ed.innerText="-"}}
+function calcChGrand(mi,ci){if(!months[mi]||months[mi]._del)return;var tp=timeProgress(months[mi].name),ps=0,pl=0,fs=0,fl=0,fr=0;
+months[mi].weeks.forEach(function(w,wi){var id="m"+mi+"_w"+wi+"_c"+ci;ps+=inp[id+"_plan_spend"]||0;pl+=inp[id+"_plan_leads"]||0;fs+=inp[id+"_fact_spend"]||0;fl+=inp[id+"_fact_leads"]||0;fr+=inp[id+"_fact_revenue"]||0});
+txt("mc"+mi+"_"+ci+"_fs",fR(fs));txt("mc"+mi+"_"+ci+"_ps","/ "+fR(ps));txt("mc"+mi+"_"+ci+"_fl",fN(fl));txt("mc"+mi+"_"+ci+"_pl","/ "+fN(pl));
+var pc=cplV(ps,pl),fc=cplV(fs,fl);txt("mc"+mi+"_"+ci+"_fc",fR(fc));txt("mc"+mi+"_"+ci+"_pc","/ "+fR(pc));
+txt("mc"+mi+"_"+ci+"_rev",fR(fr));
+var ed=document.getElementById("mc"+mi+"_"+ci+"_drr");if(ed){if(fr>0){var dv=fs/fr*100;ed.innerHTML='<span class="'+drrCls(dv)+'">'+NF.format(dv)+'%</span>'}else ed.innerText="-"}
+setMiniPc("mc"+mi+"_"+ci+"_psp",ps,fs,true,tp,false);setMiniPc("mc"+mi+"_"+ci+"_plp",pl,fl,false,tp,false);setMiniPc("mc"+mi+"_"+ci+"_pcp",pc,fc,true,1,true)}
+function setMiniPc(id,plan,fact,inv,tp,isRate){var el=document.getElementById(id);if(!el)return;if(plan<=0){el.innerHTML="";return}
+var c=fact/plan,p=Math.round(c*100),target=isRate?1:tp,tol=.2,st="bad";
+if(inv){st=c<=target?"good":c<=target+tol?"warn":"bad"}else{st=c>=target?"good":c>=target-tol?"warn":"bad"}
+var cls=st==="good"?"trend-good":st==="warn"?"trend-warn":"trend-bad";el.innerHTML='<span class="'+cls+'" style="font-size:10px;font-weight:700">'+p+'%</span>'}
+function calcGrand(m){var s={ps:0,pl:0,fs:0,fl:0,fr:0},mi=parseInt(m.replace("m",""));if(!months[mi]||months[mi]._del)return;
+var chs=months[mi].channels||[];
+months[mi].weeks.forEach(function(_,wi){chs.forEach(function(_,ci){var id=m+"_w"+wi+"_c"+ci;s.ps+=inp[id+"_plan_spend"]||0;s.pl+=inp[id+"_plan_leads"]||0;s.fs+=inp[id+"_fact_spend"]||0;s.fl+=inp[id+"_fact_leads"]||0;s.fr+=inp[id+"_fact_revenue"]||0})});
+txt(m+"_ps",fR(s.ps));txt(m+"_fs",fR(s.fs));txt(m+"_pl",fN(s.pl));txt(m+"_fl",fN(s.fl));
+var efc=document.getElementById(m+"_fc");if(efc)efc.innerHTML=fR(cplV(s.fs,s.fl));txt(m+"_pc",fR(cplV(s.ps,s.pl)));
+var tp=timeProgress(months[mi].name);
+setMiniPc(m+"_psp",s.ps,s.fs,true,tp,false);setMiniPc(m+"_plp",s.pl,s.fl,false,tp,false);
+var pc=cplV(s.ps,s.pl),fc=cplV(s.fs,s.fl),ep=document.getElementById(m+"_pcp");
+if(ep){if(pc===0)ep.innerHTML='<span style="opacity:.3">-</span>';else{var pct=Math.round(fc/pc*100),r=fc/pc,col=r<=1?"var(--grn)":r<=1.2?"var(--ylw)":"var(--red)";ep.innerHTML='<span style="color:'+col+';font-weight:700">'+pct+'%</span>'}}
+txt(m+"_rev",fR(s.fr));var ed=document.getElementById(m+"_drr");if(ed){if(s.fr>0){var dv=s.fs/s.fr*100;ed.innerHTML='<span class="'+drrCls(dv)+'" style="font-size:17px">'+NF.format(dv)+'%</span>'}else ed.innerText="-"}
+var td=0,ad=0;months[mi].weeks.forEach(function(w,wi){var da=w.days||[];td+=da.length||7;
+if(da.length>0){da.forEach(function(d,di){var act=false;chs.forEach(function(_,ci){var did=m+"_w"+wi+"_d"+di+"_c"+ci;if((inp[did+"_spend"]||0)>0||(inp[did+"_leads"]||0)>0)act=true});if(act)ad++})}
+else{var act=false;chs.forEach(function(_,ci){if((inp[m+"_w"+wi+"_c"+ci+"_fact_spend"]||0)>0)act=true});if(act)ad+=7}});
+var fcst=ad>0?Math.round(s.fl/ad*td):0;txt(m+"_fcast",fN(fcst))}
+function recalcAll(){months.forEach(function(m,mi){if(!m||m._del)return;m.weeks.forEach(function(w,wi){(m.channels||[]).forEach(function(c,ci){if(!c||c==="__deleted__")return;calcDays2Wk(mi,wi,ci);calcRow("m"+mi+"_w"+wi+"_c"+ci)})})});
+months.forEach(function(m,mi){if(!m||m._del)return;m.weeks.forEach(function(w,wi){calcWkTot("m"+mi,"w"+wi)})});
+months.forEach(function(m,mi){if(!m||m._del)return;calcGrand("m"+mi);(m.channels||[]).forEach(function(c,ci){if(!c||c==="__deleted__")return;calcChGrand(mi,ci)})})}
 
-function updateSaveStatus(online) {
-  const statusEl = document.getElementById('saveStatus');
-  const statusText = document.getElementById('statusText');
-  
-  if (online) {
-    statusEl.classList.add('online');
-    statusText.textContent = 'Онлайн';
-  } else {
-    statusEl.classList.remove('online');
-    statusText.textContent = 'Ошибка';
-  }
-}
+/* ============ CALC SMM ============ */
+function smmKey(mi,ci,wi,mt,tp){return"smm_m"+mi+"_c"+ci+"_w"+wi+"_"+slug(mt)+"_"+tp}
+function smmDKey(mi,ci,wi,di,mt){return"smm_m"+mi+"_c"+ci+"_w"+wi+"_d"+di+"_"+slug(mt)}
+function recalcSMM(id){var ps=id.split("_"),mi,ci,wi;
+ps.forEach(function(p){if(p.charAt(0)==="m"&&!isNaN(parseInt(p.substr(1))))mi=parseInt(p.substr(1));if(p.charAt(0)==="c"&&!isNaN(parseInt(p.substr(1))))ci=parseInt(p.substr(1));if(p.charAt(0)==="w"&&!isNaN(parseInt(p.substr(1))))wi=parseInt(p.substr(1))});
+if(mi!==undefined&&ci!==undefined&&wi!==undefined){calcSmmDays(mi,ci,wi);calcSmmPcts(mi,ci,wi);calcSmmGrand(mi);calcSmmChTot(mi,ci)}}
+function calcSmmDays(mi,ci,wi){var mon=months[mi];if(!mon||mon._del)return;var days=(mon.weeks[wi]&&mon.weeks[wi].days)||[];var ch=mon.smmChannels[ci];if(!ch||ch._del)return;
+var rm=reachMet(ch.metrics),em=errMet(ch.metrics),wErr=null;
+if(rm&&em){var tr=0,treach=0,has=false;
+days.forEach(function(d,di){var rk=smmDKey(mi,ci,wi,di,rm),ek=smmDKey(mi,ci,wi,di,em),rv=inp[rk],ev=inp[ek];
+if(rv!==undefined&&rv!==null&&rv!==""){var r=+rv,e=ev!==undefined&&ev!==""?+ev:0;if(r>0){tr+=r*(e/100);treach+=r;has=true}}});
+if(has&&treach>0)wErr=tr/treach*100}
+ch.metrics.forEach(function(mt){var isP=isPct(mt),isE=mt.toLowerCase().indexOf("err")>-1,sum=0,cnt=0,fin=null;
+if(isE&&wErr!==null)fin=wErr;
+else{days.forEach(function(d,di){var k=smmDKey(mi,ci,wi,di,mt),v=inp[k];if(v!==undefined&&v!==null&&v!==""){sum+=+v||0;cnt++}});
+if(cnt>0)fin=isP&&!isE?sum/cnt:sum}
+var fk=smmKey(mi,ci,wi,mt,"fact");if(fin===null)delete inp[fk];else inp[fk]=fin;
+var el=document.querySelector('input[data-id="'+fk+'"]');if(el&&document.activeElement!==el)el.value=fin===null?"":isP?fP(fin):fC(fin)})}
+function calcSmmPcts(mi,ci,wi){var mon=months[mi];if(!mon||mon._del)return;var ch=mon.smmChannels[ci];if(!ch||ch._del)return;
+ch.metrics.forEach(function(mt){var p=inp[smmKey(mi,ci,wi,mt,"plan")]||0,f=inp[smmKey(mi,ci,wi,mt,"fact")]||0;badgeEl("smmp"+mi+"_"+ci+"_"+wi+"_"+slug(mt),p,f)})}
+function calcSmmGrand(mi){var mon=months[mi];if(!mon||mon._del)return;var tR={p:0,f:0},tL={p:0,f:0},eC={pr:0,prc:0,fr:0,frc:0};
+(mon.smmChannels||[]).forEach(function(ch,ci){if(!ch||ch._del)return;
+ch.metrics.forEach(function(mt){var l=mt.toLowerCase(),isR=l.indexOf("охват")>-1||l.indexOf("показы")>-1||l.indexOf("просмотры")>-1,isL=l.indexOf("лиды")>-1;
+if(isR||isL){mon.weeks.forEach(function(w,wi){var vp=inp[smmKey(mi,ci,wi,mt,"plan")]||0,vf=inp[smmKey(mi,ci,wi,mt,"fact")]||0;
+if(isR){tR.p+=vp;tR.f+=vf}if(isL){tL.p+=vp;tL.f+=vf}})}});
+var rm=reachMet(ch.metrics),em=errMet(ch.metrics);
+if(rm&&em){mon.weeks.forEach(function(w,wi){var rp=inp[smmKey(mi,ci,wi,rm,"plan")]||0,ep=inp[smmKey(mi,ci,wi,em,"plan")]||0;
+if(rp>0){eC.pr+=rp*(ep/100);eC.prc+=rp}
+var rf=inp[smmKey(mi,ci,wi,rm,"fact")]||0,ef=inp[smmKey(mi,ci,wi,em,"fact")]||0;
+if(rf>0){eC.fr+=rf*(ef/100);eC.frc+=rf}})}});
+txt("sm"+mi+"_rp",fN(tR.p));txt("sm"+mi+"_rf",fN(tR.f));txt("sm"+mi+"_lp",fN(tL.p));txt("sm"+mi+"_lf",fN(tL.f));
+var wep=eC.prc>0?eC.pr/eC.prc*100:0,wef=eC.frc>0?eC.fr/eC.frc*100:0;
+txt("sm"+mi+"_ep",fP(wep));txt("sm"+mi+"_ef",fP(wef));
+var tp=timeProgress(mon.name);
+setMiniPc("sm"+mi+"_rpct",tR.p,tR.f,false,tp,false);setMiniPc("sm"+mi+"_lpct",tL.p,tL.f,false,tp,false);setMiniPc("sm"+mi+"_epct",wep,wef,true,1,true)}
+function calcSmmChTot(mi,ci){var mon=months[mi];if(!mon||mon._del||!mon.smmChannels[ci]||mon.smmChannels[ci]._del)return;
+var ch=mon.smmChannels[ci],tp=timeProgress(mon.name),rm=reachMet(ch.metrics),em=errMet(ch.metrics);
+var eS={pr:0,prc:0,fr:0,frc:0},hasE=false;
+if(rm&&em){hasE=true;mon.weeks.forEach(function(w,wi){var rp=inp[smmKey(mi,ci,wi,rm,"plan")]||0,ep=inp[smmKey(mi,ci,wi,em,"plan")]||0;
+if(rp>0){eS.pr+=rp*(ep/100);eS.prc+=rp}
+var rf=inp[smmKey(mi,ci,wi,rm,"fact")]||0,ef=inp[smmKey(mi,ci,wi,em,"fact")]||0;
+if(rf>0){eS.fr+=rf*(ef/100);eS.frc+=rf}})}
+ch.metrics.forEach(function(mt){var sg=slug(mt),isP=isPct(mt),isE=mt.toLowerCase().indexOf("err")>-1,sf=0,sp=0;
+if(isE&&hasE){sp=eS.prc>0?eS.pr/eS.prc*100:0;sf=eS.frc>0?eS.fr/eS.frc*100:0}
+else{var wc=0;mon.weeks.forEach(function(w,wi){var vp=inp[smmKey(mi,ci,wi,mt,"plan")],vf=inp[smmKey(mi,ci,wi,mt,"fact")];
+if(vp!==undefined||vf!==undefined){sp+=vp||0;sf+=vf||0;wc++}});
+if(isP&&!isE&&wc>0){sp/=wc;sf/=wc}}
+var ef=document.getElementById("smf"+mi+"_"+ci+"_"+sg);if(ef)ef.innerText=isP?fP(sf):fN(sf);
+var ep=document.getElementById("smp"+mi+"_"+ci+"_"+sg);if(ep)ep.innerText="/ "+(isP?fP(sp):fN(sp));
+var epc=document.getElementById("smpc"+mi+"_"+ci+"_"+sg);
+if(epc){if(sp<=0){epc.innerHTML=""}else{var c=sf/sp,p=Math.round(c*100),target=isP?1:tp,st=c>=target?"good":c>=target-.2?"warn":"bad";
+var cls=st==="good"?"trend-good":st==="warn"?"trend-warn":"trend-bad";epc.innerHTML=' <span class="'+cls+'" style="font-size:10px;font-weight:700">'+p+'%</span>'}}})}
+function recalcAllSMM(){months.forEach(function(m,mi){if(!m||!m._del===false)return;if(m._del)return;
+(m.smmChannels||[]).forEach(function(ch,ci){if(!ch||ch._del)return;
+m.weeks.forEach(function(w,wi){calcSmmDays(mi,ci,wi);calcSmmPcts(mi,ci,wi)});calcSmmChTot(mi,ci)});
+calcSmmGrand(mi)})}
 
-// ═══════════════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════════════
-function navigateTo(page) {
-  state.currentPage = page;
-  
-  // Update nav items
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.classList.toggle('active', item.dataset.page === page);
-  });
-  
-  // Update pages
-  document.querySelectorAll('.page').forEach(p => {
-    p.classList.toggle('active', p.id === `page-${page}`);
-  });
-  
-  // Update title
-  const titles = {
-    overview: 'Обзор',
-    traffic: 'Traffic',
-    smm: 'SMM',
-    organic: 'Organic',
-    settings: 'Настройки'
-  };
-  document.getElementById('pageTitle').textContent = titles[page] || page;
-  
-  // Render page content
-  renderCurrentPage();
-  
-  // Close sidebar on mobile
-  closeSidebar();
-}
+/* ============ CALC ORGANIC ============ */
+function recalcOrg(id){var ps=id.split("_"),mi=-1,wi=-1,ci=-1;
+ps.forEach(function(p){if(p.charAt(0)==="m"&&!isNaN(parseInt(p.substr(1))))mi=parseInt(p.substr(1));if(p.charAt(0)==="w"&&!isNaN(parseInt(p.substr(1))))wi=parseInt(p.substr(1));if(p.charAt(0)==="c"&&!isNaN(parseInt(p.substr(1))))ci=parseInt(p.substr(1))});
+if(mi<0||wi<0||ci<0)return;if(!months[mi]||months[mi]._del)return;
+calcOrgDays(mi,wi,ci);
+var rid="og_m"+mi+"_w"+wi+"_c"+ci;
+var pV=inp[rid+"_plan_visits"]||0,pL=inp[rid+"_plan_leads"]||0,fV=inp[rid+"_fact_visits"]||0,fL=inp[rid+"_fact_leads"]||0;
+badgeEl(rid+"_pv",pV,fV);badgeEl(rid+"_plb",pL,fL);
+var tpv=0,tpl=0,tfv=0,tfl=0,trev=0;
+months[mi].weeks.forEach(function(w,wi2){var r2="og_m"+mi+"_w"+wi2+"_c"+ci;tpv+=inp[r2+"_plan_visits"]||0;tpl+=inp[r2+"_plan_leads"]||0;tfv+=inp[r2+"_fact_visits"]||0;tfl+=inp[r2+"_fact_leads"]||0;trev+=inp[r2+"_fact_revenue"]||0});
+txt("ogc"+mi+"_"+ci+"_fv",fN(tfv));txt("ogc"+mi+"_"+ci+"_pv","/ "+fN(tpv));
+txt("ogc"+mi+"_"+ci+"_fl",fN(tfl));txt("ogc"+mi+"_"+ci+"_pl","/ "+fN(tpl));
+txt("ogc"+mi+"_"+ci+"_rev",fR(trev));
+var gpv=0,gpl=0,gfv=0,gfl=0,gre=0;
+(months[mi].organicChannels||[]).forEach(function(ch,chi){if(ch==="__deleted__")return;
+months[mi].weeks.forEach(function(w,wi2){var r2="og_m"+mi+"_w"+wi2+"_c"+chi;gpv+=inp[r2+"_plan_visits"]||0;gpl+=inp[r2+"_plan_leads"]||0;gfv+=inp[r2+"_fact_visits"]||0;gfl+=inp[r2+"_fact_leads"]||0;gre+=inp[r2+"_fact_revenue"]||0})});
+txt("og"+mi+"_pv",fN(gpv));txt("og"+mi+"_fv",fN(gfv));txt("og"+mi+"_pl",fN(gpl));txt("og"+mi+"_fl",fN(gfl));txt("og"+mi+"_rev",fR(gre));
+var tp=timeProgress(months[mi].name);
+setMiniPc("og"+mi+"_vpct",gpv,gfv,false,tp,false);setMiniPc("og"+mi+"_lpct",gpl,gfl,false,tp,false)}
+function calcOrgDays(mi,wi,ci){var mon=months[mi];if(!mon||mon._del)return;var wk=mon.weeks[wi];if(!wk||!wk.days)return;
+var rid="og_m"+mi+"_w"+wi,sv=0,sl=0,sr=0;
+wk.days.forEach(function(d,di){var did=rid+"_d"+di+"_c"+ci;sv+=inp[did+"_visits"]||0;sl+=inp[did+"_leads"]||0;sr+=inp[did+"_revenue"]||0});
+inp[rid+"_c"+ci+"_fact_visits"]=sv;inp[rid+"_c"+ci+"_fact_leads"]=sl;inp[rid+"_c"+ci+"_fact_revenue"]=sr;
+var ev=document.querySelector('input[data-id="'+rid+"_c"+ci+'_fact_visits"]');if(ev)ev.value=fC(sv);
+var el=document.querySelector('input[data-id="'+rid+"_c"+ci+'_fact_leads"]');if(el)el.value=fC(sl);
+var er=document.querySelector('input[data-id="'+rid+"_c"+ci+'_fact_revenue"]');if(er)er.value=fM(sr)}
+function recalcAllOrg(){months.forEach(function(m,mi){if(!m||m._del)return;
+(m.organicChannels||[]).forEach(function(c,ci){if(c==="__deleted__")return;
+m.weeks.forEach(function(w,wi){recalcOrg("org_m"+mi+"_w"+wi+"_c"+ci+"_fact_visits")})})})}
 
-function renderCurrentPage() {
-  switch (state.currentPage) {
-    case 'overview': renderOverview(); break;
-    case 'traffic': renderTraffic(); break;
-    case 'smm': renderSMM(); break;
-    case 'organic': renderOrganic(); break;
-  }
-}
+/* ============ OVERVIEW ============ */
+function renderOverview(){var labels=[],sf=[],sp=[],lf=[],lp=[],cf=[],cp=[],slf=[],slp=[],srf=[],srp=[],ssf=[],ssp=[];
+var fi=[];months.forEach(function(m,i){if(!m||m._del)return;var y=(m.name.match(/\d{4}/)||[])[0];if(curYear==="All"||curYear===y)fi.push(i)});
+var li=fi.length>0?fi[fi.length-1]:-1,cs={s:0,ps:0,l:0,pl:0,c:0,pc:0,sl:0,slp:0,sr:0,srp:0,ss:0,ssp:0};
+fi.forEach(function(mi){var m=months[mi];if(!m||m._del)return;labels.push(m.name);
+var ps=0,pl=0,fs=0,fl=0;(m.channels||[]).forEach(function(c,ci){if(c==="__deleted__")return;
+m.weeks.forEach(function(w,wi){var id="m"+mi+"_w"+wi+"_c"+ci;ps+=inp[id+"_plan_spend"]||0;pl+=inp[id+"_plan_leads"]||0;fs+=inp[id+"_fact_spend"]||0;fl+=inp[id+"_fact_leads"]||0})});
+sf.push(fs);sp.push(ps);lf.push(fl);lp.push(pl);
+var c=fs>0&&fl>0?Math.round(fs/fl):0,pc=ps>0&&pl>0?Math.round(ps/pl):0;cf.push(c);cp.push(pc);
+var rf=0,rp=0,lfs=0,lps=0,sf2=0,sp2=0;
+(m.smmChannels||[]).forEach(function(ch,ci){if(!ch||ch._del)return;
+ch.metrics.forEach(function(mt){var isR=mt.indexOf("Охват")>-1||mt.indexOf("Показы")>-1||mt.indexOf("Просмотры")>-1;
+var isL=mt.indexOf("Лиды")>-1;var isS=mt.indexOf("Чистый приток")>-1;
+if(isR||isL||isS){m.weeks.forEach(function(w,wi){var vf=inp[smmKey(mi,ci,wi,mt,"fact")]||0,vp=inp[smmKey(mi,ci,wi,mt,"plan")]||0;
+if(isR){rf+=vf;rp+=vp}if(isL){lfs+=vf;lps+=vp}if(isS){sf2+=vf;sp2+=vp}})}})});
+slf.push(lfs);slp.push(lps);srf.push(rf);srp.push(rp);ssf.push(sf2);ssp.push(sp2);
+if(mi===li)cs={s:fs,ps:ps,l:fl,pl:pl,c:c,pc:pc,sl:lfs,slp:lps,sr:rf,srp:rp,ss:sf2,ssp:sp2}});
+if(li>=0){var tp=timeProgress(months[li].name);
+txt("ovMonth",months[li].name);txt("ovSpend",fM(cs.s));txt("ovSpendP","План: "+fM(cs.ps));renderDev("ovSpendPc",cs.ps,cs.s,true,tp,false);
+txt("ovLeads",fN(cs.l));txt("ovLeadsP","План: "+fN(cs.pl));renderDev("ovLeadsPc",cs.pl,cs.l,false,tp,false);
+txt("ovCpl",fM(cs.c));if(cs.pc>0&&cs.c>0)renderDev("ovCplPc",cs.pc,cs.c,true,1,true);else txt("ovCplPc","-");
+txt("ovSmmL",fN(cs.sl));txt("ovSmmLP","План: "+fN(cs.slp));renderDev("ovSmmLPc",cs.slp,cs.sl,false,tp,false);
+txt("ovSmmS",fN(cs.ss));txt("ovSmmSP","План: "+fN(cs.ssp));renderDev("ovSmmSPc",cs.ssp,cs.ss,false,tp,false);
+txt("ovSmmR",fN(cs.sr));txt("ovSmmRP","План: "+fN(cs.srp));renderDev("ovSmmRPc",cs.srp,cs.sr,false,tp,false)}
+initCharts(labels,sf,sp,lf,lp,cf,cp,slf,slp,srf,srp,ssf,ssp)}
+function renderDev(id,plan,fact,inv,tp,isRate){var el=document.getElementById(id);if(!el)return;if(plan<=0){el.innerHTML="";return}
+var c=fact/plan,p=Math.round(c*100),tol=.2,st="bad";
+if(isRate){if(inv){st=fact<=plan?"good":fact<=plan*1.2?"warn":"bad"}else{st=fact>=plan?"good":fact>=plan*.8?"warn":"bad"}}
+else{if(inv){st=c<=tp?"good":c<=tp+tol?"warn":"bad"}else{st=c>=tp?"good":c>=tp-tol?"warn":"bad"}}
+var cls=st==="good"?"trend-good":st==="warn"?"trend-warn":"trend-bad";
+el.innerHTML='<span class="'+cls+'">'+p+'%</span> выполнения'}
+function initCharts(lb,sf,sp,lf,lp,cf,cp,slf,slp,srf,srp,ssf,ssp){
+mkChart("ch1",lb,sf,sp,"#6366f1");mkChart("ch2",lb,lf,lp,"#22c55e");mkChart("ch3",lb,cf,cp,"#eab308");
+mkChart("ch4",lb,slf,slp,"#8b5cf6");mkChart("ch5",lb,ssf,ssp,"#ec4899");mkChart("ch6",lb,srf,srp,"#3b82f6")}
+function mkChart(cid,lb,d1,d2,col){var cv=document.getElementById(cid);if(!cv)return;if(charts[cid])charts[cid].destroy();
+var gc=getComputedStyle(document.body).getPropertyValue("--chartGrid").trim(),tc=getComputedStyle(document.body).getPropertyValue("--tx2").trim();
+charts[cid]=new Chart(cv,{type:"line",data:{labels:lb,datasets:[{label:"Факт",data:d1,borderColor:col,backgroundColor:col,borderWidth:2,tension:.3,pointRadius:3},{label:"План",data:d2,borderColor:col,backgroundColor:"transparent",borderWidth:2,borderDash:[5,4],tension:.3,pointRadius:0}]},
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc,font:{family:"Inter"}}}},scales:{x:{grid:{color:gc},ticks:{color:tc}},y:{grid:{color:gc},ticks:{color:tc},beginAtZero:true}}}})}
 
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebarOverlay').classList.toggle('active');
-}
+/* ============ FIREBASE SYNC ============ */
+var lastMJ="",lastUH="",dbL=null;
+function uiHash(s){return Object.keys(s).filter(function(k){return k.indexOf("ui_")===0}).sort().map(function(k){return k+":"+s[k]}).join("|")}
+function softUI(){Object.keys(inp).forEach(function(k){var el=document.getElementById(k);if(el&&document.activeElement!==el){var kd=el.dataset.kind||"count",v=inp[k];el.value=kd==="money"?fM(v):kd==="percent"?fP(v):fC(v)}});
+recalcAll();recalcAllSMM();recalcAllOrg();renderOverview()}
+function initDB(cb){if(dbL)db.ref("kpi_project").off("value",dbL);
+dbL=db.ref("kpi_project").on("value",function(snap){
+var d=snap.val();
+if(d){var nm=d.monthsData||[];inp=d.inputState||{};
+var nj=JSON.stringify(nm),nuh=uiHash(inp),sc=nj!==lastMJ,uc=nuh!==lastUH;
+months=nm;lastMJ=nj;lastUH=nuh;updYearSel();
+if(sc||uc){renderTraffic();renderSMM();renderOrganic()}else softUI();
+renderOverview()}
+else{if(months.length===0)addMonth()}
+var st=document.getElementById("saveTxt");if(st)st.innerText="Онлайн";
+var si=document.getElementById("saveInd");if(si)si.classList.add("on");
+if(cb)cb(true)},function(err){if(cb)cb(false)})}
 
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('active');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// THEME
-// ═══════════════════════════════════════════════════════════════
-function toggleTheme() {
-  setTheme(state.theme === 'light' ? 'dark' : 'light');
-}
-
-function setTheme(theme) {
-  state.theme = theme;
-  localStorage.setItem('kpi-theme', theme);
-  applyTheme();
-  
-  // Re-render charts if on overview page
-  if (state.currentPage === 'overview') {
-    renderOverview();
-  }
-  
-  showToast('Тема изменена', `Применена ${theme === 'dark' ? 'тёмная' : 'светлая'} тема`, 'success');
-}
-
-function applyTheme() {
-  document.body.setAttribute('data-theme', state.theme);
-  
-  const icon = document.getElementById('themeIcon');
-  if (state.theme === 'dark') {
-    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-  } else {
-    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// YEAR FILTER
-// ═══════════════════════════════════════════════════════════════
-function updateYearFilter() {
-  const select = document.getElementById('yearFilter');
-  const years = new Set();
-  
-  state.monthsData.forEach(m => {
-    if (!m || m._deleted) return;
-    const match = m.name.match(/\d{4}/);
-    if (match) years.add(match[0]);
-  });
-  
-  let html = '<option value="all">Все года</option>';
-  Array.from(years).sort().reverse().forEach(y => {
-    html += `<option value="${y}" ${y === state.currentYear ? 'selected' : ''}>${y}</option>`;
-  });
-  
-  select.innerHTML = html;
-}
-
-function changeYear(year) {
-  state.currentYear = year;
-  renderCurrentPage();
-}
-
-function getFilteredMonths() {
-  return state.monthsData.filter(m => {
-    if (!m || m._deleted) return false;
-    if (state.currentYear === 'all') return true;
-    const match = m.name.match(/\d{4}/);
-    return match && match[0] === state.currentYear;
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MONTH MANAGEMENT
-// ═══════════════════════════════════════════════════════════════
-function addNewMonth(silent = false) {
-  const idx = state.monthsData.length;
-  const year = 2026 + Math.floor(idx / 12);
-  const monthIndex = idx % 12;
-  const name = `${MONTHS_RU[monthIndex]} ${year}`;
-  const weeks = generateWeeks(year, monthIndex);
-  
-  // Copy structure from previous month or use defaults
-  let channels = ['Яндекс Директ'];
-  let smmChannels = JSON.parse(JSON.stringify(DEFAULT_SMM_CHANNELS));
-  let organicChannels = [...DEFAULT_ORGANIC_CHANNELS];
-  
-  if (state.monthsData.length > 0) {
-    const prev = state.monthsData[state.monthsData.length - 1];
-    if (prev.channels) channels = [...prev.channels];
-    if (prev.smmChannels && prev.smmChannels.length > 0) {
-      smmChannels = JSON.parse(JSON.stringify(prev.smmChannels));
-    }
-    if (prev.organicChannels && prev.organicChannels.length > 0) {
-      organicChannels = [...prev.organicChannels];
-    }
-  }
-  
-  state.monthsData.push({
-    name,
-    collapsed: false,
-    channels,
-    smmChannels,
-    organicChannels,
-    weeks
-  });
-  
-  saveStructure();
-  
-  if (!silent) {
-    showToast('Месяц добавлен', name, 'success');
-    renderCurrentPage();
-  }
-}
-
-function deleteMonth(index) {
-  if (!confirm('Удалить этот месяц и все данные?')) return;
-  
-  state.monthsData[index] = { _deleted: true };
-  saveStructure();
-  renderCurrentPage();
-  showToast('Месяц удален', '', 'info');
-}
-
-function toggleMonth(index) {
-  state.monthsData[index].collapsed = !state.monthsData[index].collapsed;
-  saveStructure();
-  renderCurrentPage();
-}
-
-function saveStructure() {
-  db.ref('kpi_project/monthsData').set(state.monthsData);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// OVERVIEW PAGE
-// ═══════════════════════════════════════════════════════════════
-function renderOverview() {
-  const container = document.getElementById('page-overview');
-  const months = getFilteredMonths();
-  
-  if (months.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
-        <div class="empty-state-title">Нет данных</div>
-        <div class="empty-state-text">Добавьте первый месяц для начала работы</div>
-        <button class="btn btn-primary" onclick="addNewMonth()">+ Добавить месяц</button>
-      </div>
-    `;
-    return;
-  }
-  
-  const lastMonth = months[months.length - 1];
-  const lastMonthIndex = state.monthsData.indexOf(lastMonth);
-  const stats = calculateMonthStats(lastMonthIndex);
-  const timeProgress = getMonthTimeProgress(lastMonth.name);
-  
-  let html = `
-    <div class="section-header">
-      <h2 class="section-title">📅 ${lastMonth.name}</h2>
-      <div class="section-actions">
-        <button class="btn btn-secondary" onclick="exportData('csv')">📥 Экспорт</button>
-        <button class="btn btn-primary" onclick="addNewMonth()">+ Новый месяц</button>
-      </div>
-    </div>
-    
-    <div class="kpi-grid">
-      ${renderKPICard('Расход', stats.factSpend, stats.planSpend, '₽', timeProgress, '💰', '#3b82f6')}
-      ${renderKPICard('Лиды A+B', stats.factLeads, stats.planLeads, 'шт', timeProgress, '👥', '#10b981')}
-      ${renderKPICard('CPL A+B', stats.factCPL, stats.planCPL, '₽', 1, '🎯', '#f59e0b', true)}
-      ${renderKPICard('Выручка', stats.revenue, 0, '₽', 1, '💵', '#8b5cf6')}
-      ${renderKPICard('ДРР', stats.drr, 25, '%', 1, '📉', '#ef4444', true)}
-      ${renderKPICard('Прогноз лидов', stats.forecast, stats.planLeads, 'шт', 1, '🔮', '#6366f1')}
-    </div>
-    
-    <div class="chart-grid">
-      <div class="chart-card">
-        <div class="chart-title">💰 Расход по месяцам</div>
-        <div class="chart-container"><canvas id="chartSpend"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">👥 Лиды по месяцам</div>
-        <div class="chart-container"><canvas id="chartLeads"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">🎯 CPL по месяцам</div>
-        <div class="chart-container"><canvas id="chartCPL"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">📱 SMM: Лиды</div>
-        <div class="chart-container"><canvas id="chartSMMLeads"></canvas></div>
-      </div>
-    </div>
-  `;
-  
-  container.innerHTML = html;
-  
-  // Render charts after DOM is ready
-  setTimeout(() => renderCharts(months), 100);
-}
-
-function renderKPICard(label, actual, target, unit, progress, icon, color, invert = false) {
-  const percentage = target > 0 ? Math.round((actual / target) * 100) : 0;
-  const trendClass = invert 
-    ? (actual <= target ? 'up' : actual <= target * 1.2 ? 'neutral' : 'down')
-    : (actual >= target * progress ? 'up' : actual >= target * progress * 0.8 ? 'neutral' : 'down');
-  
-  const formattedActual = unit === '₽' ? formatMoney(actual) : unit === '%' ? formatPercent(actual) : formatNumber(actual);
-  const formattedTarget = target > 0 ? (unit === '₽' ? formatMoney(target) : unit === '%' ? formatPercent(target) : formatNumber(target)) : '-';
-  
-  return `
-    <div class="kpi-card" style="--kpi-color: ${color}; --kpi-bg: ${color}20;">
-      <div class="kpi-header">
-        <span class="kpi-label">${label}</span>
-        <div class="kpi-icon">${icon}</div>
-      </div>
-      <div class="kpi-value">${formattedActual}</div>
-      <div class="kpi-comparison">
-        <span class="kpi-trend ${trendClass}">${getTrendIcon(trendClass)} ${percentage}%</span>
-        <span class="kpi-target">из ${formattedTarget}</span>
-      </div>
-      ${target > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${Math.min(percentage, 100)}%"></div></div>` : ''}
-    </div>
-  `;
-}
-
-function calculateMonthStats(monthIndex) {
-  const month = state.monthsData[monthIndex];
-  if (!month || month._deleted) return {};
-  
-  let planSpend = 0, planLeads = 0, factSpend = 0, factLeads = 0, revenue = 0;
-  
-  (month.weeks || []).forEach((week, wI) => {
-    (month.channels || []).forEach((ch, cI) => {
-      if (ch === '__deleted__') return;
-      const key = `m${monthIndex}_w${wI}_c${cI}`;
-      planSpend += state.inputState[key + '_plan_spend'] || 0;
-      planLeads += state.inputState[key + '_plan_leads'] || 0;
-      factSpend += state.inputState[key + '_fact_spend'] || 0;
-      factLeads += state.inputState[key + '_fact_leads'] || 0;
-      revenue += state.inputState[key + '_fact_revenue'] || 0;
-    });
-  });
-  
-  const factCPL = factLeads > 0 ? Math.round(factSpend / factLeads) : 0;
-  const planCPL = planLeads > 0 ? Math.round(planSpend / planLeads) : 0;
-  const drr = revenue > 0 ? (factSpend / revenue) * 100 : 0;
-  
-  // Calculate forecast
-  let totalDays = 0, activeDays = 0;
-  (month.weeks || []).forEach((week, wI) => {
-    const days = week.days || [];
-    totalDays += days.length || 7;
-    
-    if (days.length > 0) {
-      days.forEach((d, dI) => {
-        let hasActivity = false;
-        (month.channels || []).forEach((ch, cI) => {
-          if (ch === '__deleted__') return;
-          const key = `m${monthIndex}_w${wI}_d${dI}_c${cI}`;
-          if ((state.inputState[key + '_spend'] || 0) > 0 || (state.inputState[key + '_leads'] || 0) > 0) {
-            hasActivity = true;
-          }
-        });
-        if (hasActivity) activeDays++;
-      });
-    } else if (factSpend > 0) {
-      activeDays += 7;
-    }
-  });
-  
-  const forecast = activeDays > 0 ? Math.round((factLeads / activeDays) * totalDays) : 0;
-  
-  return { planSpend, planLeads, factSpend, factLeads, factCPL, planCPL, revenue, drr, forecast };
-}
-
-function renderCharts(months) {
-  const labels = months.map(m => m.name);
-  const spendFact = [], spendPlan = [], leadsFact = [], leadsPlan = [], cplFact = [], cplPlan = [], smmLeads = [];
-  
-  months.forEach(month => {
-    const idx = state.monthsData.indexOf(month);
-    const stats = calculateMonthStats(idx);
-    spendFact.push(stats.factSpend);
-    spendPlan.push(stats.planSpend);
-    leadsFact.push(stats.factLeads);
-    leadsPlan.push(stats.planLeads);
-    cplFact.push(stats.factCPL);
-    cplPlan.push(stats.planCPL);
-    
-    // Calculate SMM leads
-    let smmLeadsTotal = 0;
-    (month.smmChannels || []).forEach((ch, cI) => {
-      if (!ch || ch._deleted) return;
-      ch.metrics.forEach(metric => {
-        if (metric.toLowerCase().includes('лиды')) {
-          (month.weeks || []).forEach((w, wI) => {
-            smmLeadsTotal += state.inputState[`smm_m${idx}_c${cI}_w${wI}_${slugify(metric)}_fact`] || 0;
-          });
-        }
-      });
-    });
-    smmLeads.push(smmLeadsTotal);
-  });
-  
-  const chartColors = {
-    grid: getComputedStyle(document.body).getPropertyValue('--chart-grid').trim(),
-    text: getComputedStyle(document.body).getPropertyValue('--text-secondary').trim()
-  };
-  
-  // Destroy existing charts
-  Object.values(state.charts).forEach(chart => chart.destroy());
-  state.charts = {};
-  
-  const createChart = (id, data1, data2, color) => {
-    const ctx = document.getElementById(id);
-    if (!ctx) return;
-    
-    state.charts[id] = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Факт', data: data1, borderColor: color, backgroundColor: color, borderWidth: 2, tension: 0.3, pointRadius: 3 },
-          { label: 'План', data: data2, borderColor: color, borderWidth: 2, borderDash: [5, 5], tension: 0.3, pointRadius: 0 }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: chartColors.text, font: { family: 'Inter' } } }
-        },
-        scales: {
-          x: { grid: { color: chartColors.grid }, ticks: { color: chartColors.text } },
-          y: { grid: { color: chartColors.grid }, ticks: { color: chartColors.text }, beginAtZero: true }
-        }
-      }
-    });
-  };
-  
-  createChart('chartSpend', spendFact, spendPlan, '#3b82f6');
-  createChart('chartLeads', leadsFact, leadsPlan, '#10b981');
-  createChart('chartCPL', cplFact, cplPlan, '#f59e0b');
-  createChart('chartSMMLeads', smmLeads, [], '#8b5cf6');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TRAFFIC PAGE
-// ═══════════════════════════════════════════════════════════════
-function renderTraffic() {
-  const container = document.getElementById('page-traffic');
-  const months = getFilteredMonths();
-  
-  let html = `
-    <div class="section-header">
-      <h2 class="section-title">🚀 Traffic каналы</h2>
-      <div class="section-actions">
-        <button class="btn btn-primary" onclick="addNewMonth()">+ Новый месяц</button>
-      </div>
-    </div>
-  `;
-  
-  if (months.length === 0) {
-    html += `
-      <div class="empty-state">
-        <div class="empty-state-icon">🚀</div>
-        <div class="empty-state-title">Нет данных</div>
-        <div class="empty-state-text">Добавьте месяц для начала работы</div>
-      </div>
-    `;
-    container.innerHTML = html;
-    return;
-  }
-  
-  months.forEach(month => {
-    const monthIndex = state.monthsData.indexOf(month);
-    const isExpanded = !month.collapsed;
-    const stats = calculateMonthStats(monthIndex);
-    
-    html += `
-      <div class="card month-card">
-        <div class="month-header" onclick="toggleMonth(${monthIndex})">
-          <div class="month-info">
-            <div class="month-toggle ${isExpanded ? 'expanded' : ''}">▼</div>
-            <span class="month-name">${month.name}</span>
-          </div>
-          <div class="month-stats">
-            <div class="month-stat">💰 <strong>${formatMoney(stats.factSpend)}</strong></div>
-            <div class="month-stat">👥 <strong>${formatNumber(stats.factLeads)}</strong></div>
-            <div class="month-stat">🎯 <strong>${formatMoney(stats.factCPL)}</strong></div>
-          </div>
-          <div class="section-actions">
-            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openChannelModal(${monthIndex}, 'traffic')">+ Канал</button>
-            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteMonth(${monthIndex})">🗑️</button>
-          </div>
-        </div>
-        
-        <div class="month-body ${isExpanded ? 'expanded' : ''}">
-          <div class="month-body-inner">
-            <div class="month-content">
-              <div class="channels-grid">
-                ${(month.channels || []).map((ch, cI) => {
-                  if (ch === '__deleted__') return '';
-                  return renderTrafficChannel(monthIndex, cI, ch, month.weeks);
-                }).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = html;
-}
-
-function renderTrafficChannel(monthIndex, channelIndex, channelName, weeks) {
-  const channelId = `m${monthIndex}_c${channelIndex}`;
-  const isFinanceMode = state.inputState[`ui_fin_mode_${channelId}`];
-  
-  let factSpend = 0, factLeads = 0, planSpend = 0, planLeads = 0, revenue = 0;
-  
-  weeks.forEach((week, wI) => {
-    const key = `m${monthIndex}_w${wI}_c${channelIndex}`;
-    factSpend += state.inputState[key + '_fact_spend'] || 0;
-    factLeads += state.inputState[key + '_fact_leads'] || 0;
-    planSpend += state.inputState[key + '_plan_spend'] || 0;
-    planLeads += state.inputState[key + '_plan_leads'] || 0;
-    revenue += state.inputState[key + '_fact_revenue'] || 0;
-  });
-  
-  const factCPL = factLeads > 0 ? Math.round(factSpend / factLeads) : 0;
-  const drr = revenue > 0 ? (factSpend / revenue) * 100 : 0;
-  
-  return `
-    <div class="channel-card">
-      <div class="channel-header">
-        <div class="channel-name">
-          ${channelName}
-          <button class="btn btn-sm btn-ghost" onclick="toggleFinanceMode(${monthIndex}, ${channelIndex})" title="Финансовый режим">💰</button>
-        </div>
-        <div class="channel-actions">
-          <button class="btn btn-sm btn-ghost" onclick="deleteChannel(${monthIndex}, ${channelIndex}, 'traffic')">✕</button>
-        </div>
-      </div>
-      <div class="channel-body">
-        <div class="mini-stats">
-          <div class="mini-stat">
-            <span class="mini-stat-label">Расход:</span>
-            <span class="mini-stat-value">${formatMoney(factSpend)}</span>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-stat-label">Лиды:</span>
-            <span class="mini-stat-value">${formatNumber(factLeads)}</span>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-stat-label">CPL:</span>
-            <span class="mini-stat-value">${formatMoney(factCPL)}</span>
-          </div>
-          ${isFinanceMode ? `
-            <div class="mini-stat">
-              <span class="mini-stat-label">ДРР:</span>
-              <span class="badge ${getDrrClass(drr)}">${formatPercent(drr)}</span>
-            </div>
-          ` : ''}
-        </div>
-        
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Период</th>
-                <th>Тип</th>
-                <th>Расход</th>
-                <th>${isFinanceMode ? 'Выручка' : 'Лиды'}</th>
-                <th>${isFinanceMode ? 'ДРР' : 'CPL'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${weeks.map((week, wI) => {
-                const weekId = `m${monthIndex}_w${wI}_c${channelIndex}`;
-                const isWeekCollapsed = state.inputState[`ui_week_${weekId}`];
-                
-                return `
-                  <tr style="background: var(--bg-tertiary); cursor: pointer;" onclick="toggleWeek('${weekId}')">
-                    <td colspan="5" style="font-weight: 600;">
-                      ${isWeekCollapsed ? '▸' : '▾'} ${week.title}
-                    </td>
-                  </tr>
-                  ${!isWeekCollapsed ? `
-                    <tr>
-                      <td></td>
-                      <td>План</td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_plan_spend" data-kind="money" value="${formatMoney(state.inputState[weekId + '_plan_spend'])}" onchange="handleInputChange(this)"></td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_plan_${isFinanceMode ? 'revenue' : 'leads'}" data-kind="count" value="${formatNumber(state.inputState[weekId + (isFinanceMode ? '_plan_revenue' : '_plan_leads')])}" onchange="handleInputChange(this)" ${isFinanceMode && 'disabled style="opacity:0.5"'}></td>
-                      <td>-</td>
-                    </tr>
-                    <tr>
-                      <td></td>
-                      <td>Факт</td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_fact_spend" data-kind="money" value="${formatMoney(state.inputState[weekId + '_fact_spend'])}" onchange="handleInputChange(this)"></td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_fact_${isFinanceMode ? 'revenue' : 'leads'}" data-kind="count" value="${formatNumber(state.inputState[weekId + (isFinanceMode ? '_fact_revenue' : '_fact_leads')])}" onchange="handleInputChange(this)"></td>
-                      <td class="${isFinanceMode ? getDrrClass((state.inputState[weekId + '_fact_revenue'] || 0) > 0 ? (state.inputState[weekId + '_fact_spend'] || 0) / state.inputState[weekId + '_fact_revenue'] * 100 : 0) : ''}">
-                        ${isFinanceMode 
-                          ? ((state.inputState[weekId + '_fact_revenue'] || 0) > 0 ? formatPercent((state.inputState[weekId + '_fact_spend'] || 0) / state.inputState[weekId + '_fact_revenue'] * 100) : '-')
-                          : ((state.inputState[weekId + '_fact_leads'] || 0) > 0 ? formatMoney(Math.round((state.inputState[weekId + '_fact_spend'] || 0) / state.inputState[weekId + '_fact_leads'])) : '-')
-                        }
-                      </td>
-                    </tr>
-                  ` : ''}
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SMM PAGE
-// ═══════════════════════════════════════════════════════════════
-function renderSMM() {
-  const container = document.getElementById('page-smm');
-  const months = getFilteredMonths();
-  
-  let html = `
-    <div class="section-header">
-      <h2 class="section-title">📱 SMM каналы</h2>
-      <div class="section-actions">
-        <button class="btn btn-primary" onclick="addNewMonth()">+ Новый месяц</button>
-      </div>
-    </div>
-  `;
-  
-  if (months.length === 0) {
-    html += `
-      <div class="empty-state">
-        <div class="empty-state-icon">📱</div>
-        <div class="empty-state-title">Нет данных</div>
-        <div class="empty-state-text">Добавьте месяц для начала работы</div>
-      </div>
-    `;
-    container.innerHTML = html;
-    return;
-  }
-  
-  months.forEach(month => {
-    const monthIndex = state.monthsData.indexOf(month);
-    const isExpanded = !month.collapsed;
-    
-    html += `
-      <div class="card month-card">
-        <div class="month-header" onclick="toggleMonth(${monthIndex})">
-          <div class="month-info">
-            <div class="month-toggle ${isExpanded ? 'expanded' : ''}">▼</div>
-            <span class="month-name">${month.name}</span>
-          </div>
-          <div class="section-actions">
-            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openChannelModal(${monthIndex}, 'smm')">+ Канал</button>
-            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteMonth(${monthIndex})">🗑️</button>
-          </div>
-        </div>
-        
-        <div class="month-body ${isExpanded ? 'expanded' : ''}">
-          <div class="month-body-inner">
-            <div class="month-content">
-              <div class="channels-grid">
-                ${(month.smmChannels || []).map((ch, cI) => {
-                  if (!ch || ch._deleted) return '';
-                  return renderSMMChannel(monthIndex, cI, ch, month.weeks);
-                }).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = html;
-}
-
-function renderSMMChannel(monthIndex, channelIndex, channel, weeks) {
-  return `
-    <div class="channel-card">
-      <div class="channel-header">
-        <div class="channel-name">${channel.name}</div>
-        <div class="channel-actions">
-          <button class="btn btn-sm btn-ghost" onclick="deleteChannel(${monthIndex}, ${channelIndex}, 'smm')">✕</button>
-        </div>
-      </div>
-      <div class="channel-body">
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Период</th>
-                <th>Тип</th>
-                ${channel.metrics.map(m => `<th>${m}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${weeks.map((week, wI) => {
-                const weekId = `smm_m${monthIndex}_c${channelIndex}_w${wI}`;
-                const isWeekCollapsed = state.inputState[`ui_week_${weekId}`];
-                
-                return `
-                  <tr style="background: var(--bg-tertiary); cursor: pointer;" onclick="toggleWeek('${weekId}')">
-                    <td colspan="${2 + channel.metrics.length}" style="font-weight: 600;">
-                      ${isWeekCollapsed ? '▸' : '▾'} ${week.title}
-                    </td>
-                  </tr>
-                  ${!isWeekCollapsed ? `
-                    <tr>
-                      <td></td>
-                      <td>План</td>
-                      ${channel.metrics.map(metric => {
-                        const key = `${weekId}_${slugify(metric)}_plan`;
-                        const isPct = isPercentMetric(metric);
-                        return `<td><input type="text" class="cell-input" data-id="${key}" data-kind="${isPct ? 'percent' : 'count'}" value="${isPct ? formatPercent(state.inputState[key]) : formatNumber(state.inputState[key])}" onchange="handleInputChange(this)"></td>`;
-                      }).join('')}
-                    </tr>
-                    <tr>
-                      <td></td>
-                      <td>Факт</td>
-                      ${channel.metrics.map(metric => {
-                        const key = `${weekId}_${slugify(metric)}_fact`;
-                        const isPct = isPercentMetric(metric);
-                        return `<td><input type="text" class="cell-input" data-id="${key}" data-kind="${isPct ? 'percent' : 'count'}" value="${isPct ? formatPercent(state.inputState[key]) : formatNumber(state.inputState[key])}" onchange="handleInputChange(this)"></td>`;
-                      }).join('')}
-                    </tr>
-                  ` : ''}
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ORGANIC PAGE
-// ═══════════════════════════════════════════════════════════════
-function renderOrganic() {
-  const container = document.getElementById('page-organic');
-  const months = getFilteredMonths();
-  
-  let html = `
-    <div class="section-header">
-      <h2 class="section-title">🌿 Organic трафик</h2>
-      <div class="section-actions">
-        <button class="btn btn-primary" onclick="addNewMonth()">+ Новый месяц</button>
-      </div>
-    </div>
-  `;
-  
-  if (months.length === 0) {
-    html += `
-      <div class="empty-state">
-        <div class="empty-state-icon">🌿</div>
-        <div class="empty-state-title">Нет данных</div>
-        <div class="empty-state-text">Добавьте месяц для начала работы</div>
-      </div>
-    `;
-    container.innerHTML = html;
-    return;
-  }
-  
-  months.forEach(month => {
-    const monthIndex = state.monthsData.indexOf(month);
-    const isExpanded = !month.collapsed;
-    
-    html += `
-      <div class="card month-card">
-        <div class="month-header" onclick="toggleMonth(${monthIndex})">
-          <div class="month-info">
-            <div class="month-toggle ${isExpanded ? 'expanded' : ''}">▼</div>
-            <span class="month-name">${month.name}</span>
-          </div>
-          <div class="section-actions">
-            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openChannelModal(${monthIndex}, 'organic')">+ Канал</button>
-            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteMonth(${monthIndex})">🗑️</button>
-          </div>
-        </div>
-        
-        <div class="month-body ${isExpanded ? 'expanded' : ''}">
-          <div class="month-body-inner">
-            <div class="month-content">
-              <div class="channels-grid">
-                ${(month.organicChannels || []).map((ch, cI) => {
-                  if (ch === '__deleted__') return '';
-                  return renderOrganicChannel(monthIndex, cI, ch, month.weeks);
-                }).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  `;
-  
-  container.innerHTML = html;
-}
-
-function renderOrganicChannel(monthIndex, channelIndex, channelName, weeks) {
-  return `
-    <div class="channel-card">
-      <div class="channel-header">
-        <div class="channel-name">${channelName}</div>
-        <div class="channel-actions">
-          <button class="btn btn-sm btn-ghost" onclick="deleteChannel(${monthIndex}, ${channelIndex}, 'organic')">✕</button>
-        </div>
-      </div>
-      <div class="channel-body">
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Период</th>
-                <th>Тип</th>
-                <th>Переходы</th>
-                <th>Лиды</th>
-                <th>Выручка</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${weeks.map((week, wI) => {
-                const weekId = `org_m${monthIndex}_w${wI}_c${channelIndex}`;
-                const isWeekCollapsed = state.inputState[`ui_week_${weekId}`];
-                
-                return `
-                  <tr style="background: var(--bg-tertiary); cursor: pointer;" onclick="toggleWeek('${weekId}')">
-                    <td colspan="5" style="font-weight: 600;">
-                      ${isWeekCollapsed ? '▸' : '▾'} ${week.title}
-                    </td>
-                  </tr>
-                  ${!isWeekCollapsed ? `
-                    <tr>
-                      <td></td>
-                      <td>План</td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_plan_visits" data-kind="count" value="${formatNumber(state.inputState[weekId + '_plan_visits'])}" onchange="handleInputChange(this)"></td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_plan_leads" data-kind="count" value="${formatNumber(state.inputState[weekId + '_plan_leads'])}" onchange="handleInputChange(this)"></td>
-                      <td>-</td>
-                    </tr>
-                    <tr>
-                      <td></td>
-                      <td>Факт</td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_fact_visits" data-kind="count" value="${formatNumber(state.inputState[weekId + '_fact_visits'])}" onchange="handleInputChange(this)"></td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_fact_leads" data-kind="count" value="${formatNumber(state.inputState[weekId + '_fact_leads'])}" onchange="handleInputChange(this)"></td>
-                      <td><input type="text" class="cell-input" data-id="${weekId}_fact_revenue" data-kind="money" value="${formatMoney(state.inputState[weekId + '_fact_revenue'])}" onchange="handleInputChange(this)"></td>
-                    </tr>
-                  ` : ''}
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// INPUT HANDLING
-// ═══════════════════════════════════════════════════════════════
-function handleInputChange(input) {
-  const id = input.dataset.id;
-  const kind = input.dataset.kind || 'count';
-  const rawValue = input.value.trim();
-  
-  let value;
-  if (rawValue === '') {
-    value = null;
-    delete state.inputState[id];
-    db.ref('kpi_project/inputState/' + id).remove();
-  } else {
-    if (kind === 'money') value = parseNum(rawValue);
-    else if (kind === 'percent') value = parsePercent(rawValue);
-    else value = parseNum(rawValue);
-    
-    state.inputState[id] = value;
-    
-    // Debounce save to Firebase
-    if (state.debounceTimers[id]) {
-      clearTimeout(state.debounceTimers[id]);
-    }
-    
-    state.debounceTimers[id] = setTimeout(() => {
-      db.ref('kpi_project/inputState/' + id).set(value);
-    }, 500);
-  }
-  
-  // Format display
-  if (rawValue !== '') {
-    if (kind === 'money') input.value = formatMoney(value);
-    else if (kind === 'percent') input.value = formatPercent(value);
-    else input.value = formatNumber(value);
-  }
-  
-  // Re-render current page to update calculations
-  renderCurrentPage();
-}
-
-function toggleWeek(weekId) {
-  const key = `ui_week_${weekId}`;
-  state.inputState[key] = !state.inputState[key];
-  db.ref('kpi_project/inputState/' + key).set(state.inputState[key]);
-  renderCurrentPage();
-}
-
-function toggleFinanceMode(monthIndex, channelIndex) {
-  const key = `ui_fin_mode_m${monthIndex}_c${channelIndex}`;
-  state.inputState[key] = !state.inputState[key];
-  db.ref('kpi_project/inputState/' + key).set(state.inputState[key]);
-  renderTraffic();
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CHANNEL MANAGEMENT
-// ═══════════════════════════════════════════════════════════════
-function openChannelModal(monthIndex, type) {
-  const modal = document.getElementById('channelModal');
-  const title = document.getElementById('channelModalTitle');
-  const metricsGroup = document.getElementById('metricsGroup');
-  const saveBtn = document.getElementById('channelModalSave');
-  
-  title.textContent = type === 'smm' ? 'Добавить SMM канал' : 'Добавить канал';
-  metricsGroup.style.display = type === 'smm' ? 'block' : 'none';
-  
-  if (type === 'smm') {
-    const checkboxes = document.getElementById('metricsCheckboxes');
-    checkboxes.innerHTML = AVAILABLE_METRICS.map(m => `
-      <label class="checkbox-item">
-        <input type="checkbox" value="${m}"> ${m}
-      </label>
-    `).join('');
-  }
-  
-  saveBtn.onclick = () => saveChannel(monthIndex, type);
-  modal.classList.add('active');
-}
-
-function saveChannel(monthIndex, type) {
-  const nameInput = document.getElementById('channelNameInput');
-  const name = nameInput.value.trim();
-  
-  if (!name) {
-    showToast('Ошибка', 'Введите название канала', 'error');
-    return;
-  }
-  
-  if (type === 'smm') {
-    const selectedMetrics = Array.from(document.querySelectorAll('#metricsCheckboxes input:checked'))
-      .map(cb => cb.value);
-    
-    if (selectedMetrics.length === 0) {
-      showToast('Ошибка', 'Выберите хотя бы одну метрику', 'error');
-      return;
-    }
-    
-    if (!state.monthsData[monthIndex].smmChannels) {
-      state.monthsData[monthIndex].smmChannels = [];
-    }
-    
-    state.monthsData[monthIndex].smmChannels.push({ name, metrics: selectedMetrics });
-  } else if (type === 'traffic') {
-    state.monthsData[monthIndex].channels.push(name);
-  } else if (type === 'organic') {
-    state.monthsData[monthIndex].organicChannels.push(name);
-  }
-  
-  saveStructure();
-  closeModal('channelModal');
-  renderCurrentPage();
-  showToast('Канал добавлен', name, 'success');
-}
-
-function deleteChannel(monthIndex, channelIndex, type) {
-  if (!confirm('Удалить канал?')) return;
-  
-  if (type === 'traffic') {
-    state.monthsData[monthIndex].channels[channelIndex] = '__deleted__';
-  } else if (type === 'smm') {
-    state.monthsData[monthIndex].smmChannels[channelIndex] = { _deleted: true };
-  } else if (type === 'organic') {
-    state.monthsData[monthIndex].organicChannels[channelIndex] = '__deleted__';
-  }
-  
-  saveStructure();
-  renderCurrentPage();
-  showToast('Канал удален', '', 'info');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
-}
-
-// ═══════════════════════════════════════════════════════════════
-// EXPORT
-// ═══════════════════════════════════════════════════════════════
-function exportData(format) {
-  const months = getFilteredMonths();
-  
-  if (format === 'json') {
-    const data = JSON.stringify({ months, inputState: state.inputState }, null, 2);
-    downloadFile(data, 'kpi-data.json', 'application/json');
-    showToast('Экспорт завершен', 'Данные выгружены в JSON', 'success');
-    return;
-  }
-  
-  // CSV export
-  let csv = 'Месяц,Канал,План Расход,Факт Расход,План Лиды,Факт Лиды,Выручка,ДРР\n';
-  
-  months.forEach(month => {
-    const monthIndex = state.monthsData.indexOf(month);
-    (month.channels || []).forEach((ch, cI) => {
-      if (ch === '__deleted__') return;
-      
-      let planSpend = 0, factSpend = 0, planLeads = 0, factLeads = 0, revenue = 0;
-      
-      (month.weeks || []).forEach((week, wI) => {
-        const key = `m${monthIndex}_w${wI}_c${cI}`;
-        planSpend += state.inputState[key + '_plan_spend'] || 0;
-        factSpend += state.inputState[key + '_fact_spend'] || 0;
-        planLeads += state.inputState[key + '_plan_leads'] || 0;
-        factLeads += state.inputState[key + '_fact_leads'] || 0;
-        revenue += state.inputState[key + '_fact_revenue'] || 0;
-      });
-      
-      const drr = revenue > 0 ? (factSpend / revenue * 100).toFixed(2) : '0';
-      csv += `${month.name},${ch},${planSpend},${factSpend},${planLeads},${factLeads},${revenue},${drr}%\n`;
-    });
-  });
-  
-  downloadFile(csv, 'kpi-data.csv', 'text/csv');
-  showToast('Экспорт завершен', 'Данные выгружены в CSV', 'success');
-}
-
-function downloadFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TOAST NOTIFICATIONS
-// ═══════════════════════════════════════════════════════════════
-function showToast(title, message, type = 'info') {
-  const container = document.getElementById('toastContainer');
-  const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
-  
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <div class="toast-icon">${icons[type]}</div>
-    <div class="toast-content">
-      <div class="toast-title">${title}</div>
-      <div class="toast-message">${message}</div>
-    </div>
-    <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
-  `;
-  
-  container.appendChild(toast);
-  
-  setTimeout(() => {
-    toast.remove();
-  }, 5000);
-}
-
-// ═══════════════════════════════════════════════════════════════
-// KEYBOARD SHORTCUTS
-// ═══════════════════════════════════════════════════════════════
-function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    // Alt + 1-5 for navigation
-    if (e.altKey && e.key >= '1' && e.key <= '5') {
-      const pages = ['overview', 'traffic', 'smm', 'organic', 'settings'];
-      const index = parseInt(e.key) - 1;
-      if (pages[index]) {
-        e.preventDefault();
-        navigateTo(pages[index]);
-      }
-    }
-    
-    // Alt + T for theme toggle
-    if (e.altKey && e.key === 't') {
-      e.preventDefault();
-      toggleTheme();
-    }
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// INITIALIZATION
-// ═══════════════════════════════════════════════════════════════
-applyTheme();
+/* ============ INIT ============ */
+(function(){setupEvents();
+window.addEventListener("resize",function(){});
+auth.onAuthStateChanged(function(user){
+var ls=document.getElementById("loginScreen"),app=document.getElementById("app");
+var title=document.querySelector("#loginScreen .login-title"),sub=document.querySelector("#loginScreen .login-sub");
+var btn=document.getElementById("gLoginBtn"),uinf=document.getElementById("loginUser"),out=document.getElementById("loginOut");
+if(user){ls.classList.add("hidden");app.classList.add("show");
+initDB(function(ok){if(!ok){ls.classList.remove("hidden");app.classList.remove("show");
+title.textContent="Доступ запрещен";sub.textContent="Вашего email нет в белом списке.";
+btn.style.display="none";uinf.textContent="Вы вошли как: "+user.email;out.style.display="block"}})}
+else{ls.classList.remove("hidden");app.classList.remove("show");
+title.textContent="KPI Dashboard";sub.textContent="Войдите через Google для доступа к аналитике";
+btn.style.display="";uinf.textContent="";out.style.display="none"}})})();
 </script>
 </body>
 </html>
