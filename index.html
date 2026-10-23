@@ -5870,6 +5870,431 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+
+/* =============================================================
+   PERFORMANCE PATCH: INSTANT INPUT & ZERO-FREEZE SYNC
+============================================================= */
+const _inputElCache = new Map();
+let _backupTimer = null;
+let _pendingLocalWrites = 0;
+let _lastLocalWriteTs = 0;
+const _dirtyInputKeys = new Set();
+const _firebaseInputTimers = {};
+const _rafRecalcQueue = new Set();
+let _rafRecalcId = null;
+
+// 1. O(1) кэш DOM-инпутов вместо многократного document.querySelector
+function _getFastInputEl(key) {
+  let el = _inputElCache.get(key);
+  if (el && el.isConnected) return el;
+  el = document.getElementById(key) || document.querySelector(`input[data-id="${key}"]`);
+  if (el) _inputElCache.set(key, el);
+  return el;
+}
+
+// 2. Отложенная запись в localStorage (не блокирует основной поток при вводе)
+function _saveLocalBackupNow() {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      monthsData,
+      inputState
+    }));
+  } catch (e) {
+    console.warn("Local backup storage warning:", e);
+  }
+}
+
+function saveLocalBackup() {
+  if (_backupTimer) clearTimeout(_backupTimer);
+  _backupTimer = setTimeout(_saveLocalBackupNow, 1200);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (_backupTimer) _saveLocalBackupNow();
+});
+
+// 3. Защита от локального эха Firebase при сохранении ячейки
+function persistInputKey(key, val) {
+  saveLocalBackup();
+  if (isLocalMode || !db) {
+    setSaveStatus('local');
+    return;
+  }
+
+  _dirtyInputKeys.add(key);
+  _pendingLocalWrites++;
+  _lastLocalWriteTs = Date.now();
+  setSaveStatus('saving');
+
+  const ref = db.ref('kpi_project/inputState/' + key);
+  const op = (val === null || val === undefined) ? ref.remove() : ref.set(val);
+  op.then(() => {
+    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
+    if (_pendingLocalWrites === 0) _dirtyInputKeys.clear();
+    setSaveStatus('saved');
+  }).catch(() => {
+    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
+    setSaveStatus('local');
+  });
+}
+
+// 4. Оптимизированный рендер (Overview и графики пересчитываются только когда открыты)
+function renderAll() {
+  _inputElCache.clear();
+  renderTraffic();
+  renderSMM();
+  renderOrganic();
+  if (document.getElementById('overview')?.classList.contains('active')) {
+    renderOverview();
+  }
+}
+
+// 5. Устранение медленных querySelector в расчетах дней SMM и Organic
+function calcSMMDaysToWeek(mI, cI, wI) {
+  const month = monthsData[mI];
+  if (!month || month._deleted) return;
+
+  const days = month.weeks[wI].days || [];
+  const ch = month.smmChannels[cI];
+  if (!ch || ch._deleted) return;
+
+  const reachMet = findReachMetricName(ch.metrics);
+  const errMet = findErrMetricName(ch.metrics);
+
+  let weightedErrFact = null;
+
+  if (reachMet && errMet) {
+    let totalReactions = 0;
+    let totalReach = 0;
+    let hasErrDayData = false;
+
+    days.forEach((d, dI) => {
+      const rVal = inputState[getSMMDayKey(mI, cI, wI, dI, reachMet)];
+      const eVal = inputState[getSMMDayKey(mI, cI, wI, dI, errMet)];
+
+      if (rVal !== undefined && rVal !== null && rVal !== '' && eVal !== undefined && eVal !== null && eVal !== '') {
+        const r = +rVal;
+        const e = +eVal;
+        if (r > 0) {
+          totalReactions += r * (e / 100);
+          totalReach += r;
+          hasErrDayData = true;
+        }
+      }
+    });
+
+    if (hasErrDayData && totalReach > 0) {
+      weightedErrFact = (totalReactions / totalReach) * 100;
+    }
+  }
+
+  ch.metrics.forEach(metricName => {
+    const isPct = isPercentMetric(metricName);
+    const isErr = metricName.toLowerCase().includes('err');
+
+    let sum = 0;
+    let cnt = 0;
+    let finalVal = null;
+
+    if (isErr && weightedErrFact !== null) {
+      finalVal = weightedErrFact;
+    } else {
+      days.forEach((d, dI) => {
+        const val = inputState[getSMMDayKey(mI, cI, wI, dI, metricName)];
+        if (val !== undefined && val !== null && val !== '') {
+          sum += (+val || 0);
+          cnt += 1;
+        }
+      });
+
+      if (cnt > 0) {
+        finalVal = (isPct && !isErr) ? (sum / cnt) : sum;
+      }
+    }
+
+    const factKey = getSMMKey(mI, cI, wI, metricName, 'fact');
+    const el = _getFastInputEl(factKey);
+
+    if (finalVal !== null) {
+      inputState[factKey] = finalVal;
+      if (el && document.activeElement !== el) {
+        el.value = isPct ? formatPercent(finalVal) : formatCount(finalVal);
+        el.classList.add('cell-auto-sum');
+        el.title = 'Авто-расчёт по заполненным дням недели';
+      }
+    } else if (el) {
+      el.classList.remove('cell-auto-sum');
+      el.title = '';
+    }
+  });
+}
+
+function calcOrgDaysToWeek(mI, wI, cI) {
+  const month = monthsData[mI];
+  if (!month || month._deleted) return;
+
+  const weekObj = month.weeks[wI];
+  if (!weekObj || !weekObj.days) return;
+
+  const rowId = `org_m${mI}_w${wI}`;
+  let sumV = 0, sumL = 0, sumRev = 0;
+  let hasDayV = false, hasDayL = false, hasDayRev = false;
+
+  weekObj.days.forEach((d, dI) => {
+    const dayId = `${rowId}_d${dI}_c${cI}`;
+    const rawV = inputState[`${dayId}_visits`];
+    const rawL = inputState[`${dayId}_leads`];
+    const rawRev = inputState[`${dayId}_revenue`];
+
+    if (rawV !== undefined && rawV !== null && rawV !== '') hasDayV = true;
+    if (rawL !== undefined && rawL !== null && rawL !== '') hasDayL = true;
+    if (rawRev !== undefined && rawRev !== null && rawRev !== '') hasDayRev = true;
+
+    const vV = +rawV || 0;
+    const vL = +rawL || 0;
+    const vRev = +rawRev || 0;
+
+    sumV += vV;
+    sumL += vL;
+    sumRev += vRev;
+
+    const elDayCr = document.getElementById(`${dayId}_cr`);
+    if (elDayCr) {
+      elDayCr.innerText = vV > 0 && vL > 0 ? formatPercent((vL / vV) * 100) : '-';
+    }
+  });
+
+  const wInpV = _getFastInputEl(`${rowId}_c${cI}_fact_visits`);
+  if (hasDayV) {
+    inputState[`${rowId}_c${cI}_fact_visits`] = sumV;
+    if (wInpV && document.activeElement !== wInpV) {
+      wInpV.value = formatCount(sumV);
+      wInpV.classList.add('cell-auto-sum');
+    }
+  } else if (wInpV) {
+    wInpV.classList.remove('cell-auto-sum');
+  }
+
+  const wInpL = _getFastInputEl(`${rowId}_c${cI}_fact_leads`);
+  if (hasDayL) {
+    inputState[`${rowId}_c${cI}_fact_leads`] = sumL;
+    if (wInpL && document.activeElement !== wInpL) {
+      wInpL.value = formatCount(sumL);
+      wInpL.classList.add('cell-auto-sum');
+    }
+  } else if (wInpL) {
+    wInpL.classList.remove('cell-auto-sum');
+  }
+
+  const wInpRev = _getFastInputEl(`${rowId}_c${cI}_fact_revenue`);
+  if (hasDayRev) {
+    inputState[`${rowId}_c${cI}_fact_revenue`] = sumRev;
+    if (wInpRev && document.activeElement !== wInpRev) {
+      wInpRev.value = formatMoney(sumRev);
+      wInpRev.classList.add('cell-auto-sum');
+    }
+  } else if (wInpRev) {
+    wInpRev.classList.remove('cell-auto-sum');
+  }
+}
+
+// 6. Неблокирующий пересчет через requestAnimationFrame и умный Blur без лишних запросов
+function _scheduleRecalcForId(id) {
+  _rafRecalcQueue.add(id);
+  if (_rafRecalcId) return;
+  _rafRecalcId = requestAnimationFrame(() => {
+    _rafRecalcId = null;
+    const ids = Array.from(_rafRecalcQueue);
+    _rafRecalcQueue.clear();
+    ids.forEach(itemId => {
+      if (itemId.startsWith('smm_')) recalcSMM(itemId);
+      else if (itemId.startsWith('org_')) recalcOrganic(itemId);
+      else recalc(itemId);
+    });
+  });
+}
+
+function onCellBlur(el) {
+  const id = el.dataset.id;
+  if (!id) return;
+  const kind = el.dataset.kind || 'count';
+  const rawValue = el.value.trim();
+  const wasEdited = el.dataset.edited === "true";
+  el.dataset.edited = "false";
+
+  // Если пользователь просто кликнул по ячейке и ушел без правок — только возвращаем маску
+  if (!wasEdited) {
+    const existing = inputState[id];
+    if (existing === undefined || existing === null || existing === '') {
+      el.value = '';
+    } else if (kind === 'money') {
+      el.value = formatMoney(existing);
+    } else if (kind === 'percent') {
+      el.value = formatPercent(existing);
+    } else {
+      el.value = formatCount(existing);
+    }
+    return;
+  }
+
+  if (_firebaseInputTimers[id]) {
+    clearTimeout(_firebaseInputTimers[id]);
+    delete _firebaseInputTimers[id];
+  }
+
+  if (rawValue === '') {
+    el.value = '';
+    delete inputState[id];
+    persistInputKey(id, null);
+    _scheduleRecalcForId(id);
+    return;
+  }
+
+  let n = (kind === 'percent')
+    ? applyDzenMagic(el, parsePercentLike(rawValue), rawValue)
+    : parseNumberLike(rawValue);
+
+  inputState[id] = n;
+  persistInputKey(id, n);
+
+  if (kind === 'money') el.value = formatMoney(n);
+  else if (kind === 'percent') el.value = formatPercent(n);
+  else el.value = formatCount(n);
+
+  _scheduleRecalcForId(id);
+}
+
+function setupEventListeners() {
+  const handleInput = (e) => {
+    const el = e.target;
+    if (!el || !el.classList.contains('cell-input')) return;
+    const id = el.dataset.id;
+    if (!id) return;
+
+    const kind = el.dataset.kind || 'count';
+    el.dataset.edited = "true";
+    _dirtyInputKeys.add(id);
+
+    const raw = el.value.trim();
+    if (raw === '') {
+      delete inputState[id];
+    } else {
+      inputState[id] = (kind === 'percent') ? parsePercentLike(raw) : parseNumberLike(raw);
+    }
+
+    _scheduleRecalcForId(id);
+
+    if (_firebaseInputTimers[id]) clearTimeout(_firebaseInputTimers[id]);
+    _firebaseInputTimers[id] = setTimeout(() => {
+      delete _firebaseInputTimers[id];
+      persistInputKey(id, inputState[id] ?? null);
+    }, 700);
+  };
+
+  const handleFocus = (e) => {
+    if (e.target && e.target.classList.contains('cell-input')) onCellFocus(e.target);
+  };
+
+  const handleBlur = (e) => {
+    if (e.target && e.target.classList.contains('cell-input')) onCellBlur(e.target);
+  };
+
+  ['trafficContainer', 'smmContainer', 'organicContainer'].forEach(containerId => {
+    const c = document.getElementById(containerId);
+    if (c) {
+      c.addEventListener('input', handleInput);
+      c.addEventListener('focusin', handleFocus);
+      c.addEventListener('focusout', handleBlur);
+    }
+  });
+}
+
+// 7. Быстрый softUpdateUI за один проход и фильтрация собственных событий Firebase
+function softUpdateUI() {
+  document.querySelectorAll('.cell-input[data-id]').forEach(el => {
+    if (document.activeElement === el) return;
+    const key = el.dataset.id;
+    const val = inputState[key];
+    const kind = el.dataset.kind || 'count';
+    const formatted = (val === undefined || val === null || val === '')
+      ? ''
+      : (kind === 'money' ? formatMoney(val) : (kind === 'percent' ? formatPercent(val) : formatCount(val)));
+    if (el.value !== formatted) el.value = formatted;
+  });
+
+  recalcAll();
+  recalcAllSMM();
+  recalcAllOrganic();
+  if (document.getElementById('overview')?.classList.contains('active')) {
+    renderOverview();
+  }
+}
+
+function initFirebaseListener(callback) {
+  if (!db) {
+    if (callback) callback(false);
+    return;
+  }
+  if (dbListenerRef) db.ref('kpi_project').off('value', dbListenerRef);
+
+  dbListenerRef = db.ref('kpi_project').on('value', (snapshot) => {
+    const data = snapshot.val();
+
+    if (data) {
+      const newMonthsData = data.monthsData || [];
+      const incomingState = data.inputState || {};
+
+      const newJson = JSON.stringify(newMonthsData);
+      const newUiHash = getUiHash(incomingState);
+
+      const isStructureChanged = newJson !== lastMonthsJson;
+      const isUiChanged = newUiHash !== lastUiHash;
+
+      // Игнорируем обратное эхо от нашего собственного ввода, чтобы не вешать интерфейс
+      if (!isStructureChanged && !isUiChanged && (_pendingLocalWrites > 0 || (Date.now() - _lastLocalWriteTs < 1800))) {
+        let hasExternalDiff = false;
+        Object.keys(incomingState).forEach(k => {
+          if (!_dirtyInputKeys.has(k) && inputState[k] !== incomingState[k]) {
+            inputState[k] = incomingState[k];
+            hasExternalDiff = true;
+          }
+        });
+        if (!hasExternalDiff) {
+          setSaveStatus('online');
+          if (callback) callback(true);
+          return;
+        }
+      } else {
+        _dirtyInputKeys.forEach(k => {
+          if (inputState[k] !== undefined) incomingState[k] = inputState[k];
+          else delete incomingState[k];
+        });
+        inputState = incomingState;
+      }
+
+      monthsData = newMonthsData;
+      lastMonthsJson = newJson;
+      lastUiHash = newUiHash;
+
+      saveLocalBackup();
+      updateFilterDropdowns();
+
+      if (isStructureChanged || isUiChanged) renderAll();
+      else softUpdateUI();
+    } else {
+      if (monthsData.length === 0) addNewMonth();
+    }
+
+    setSaveStatus('online');
+    if (callback) callback(true);
+  }, (error) => {
+    console.warn("Firebase Access/Network Error:", error.code);
+    setSaveStatus('error');
+    if (callback) callback(false);
+  });
+}
+   
 /* =============================================================
    15. APPLICATION BOOTSTRAP
 ============================================================= */
