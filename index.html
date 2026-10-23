@@ -5870,12 +5870,19 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-
 /* =============================================================
-   PERFORMANCE PATCH: INSTANT INPUT & ZERO-FREEZE SYNC
+   ENTERPRISE PERFORMANCE & REALTIME PATCH v2.0 (ALL-IN-ONE)
+   Вставить прямо перед секцией 15. APPLICATION BOOTSTRAP
 ============================================================= */
+
+// --- A. КЭШИРОВАНИЕ И СЛУЖЕБНЫЕ СТРУКТУРЫ ПАМЯТИ ---
 const _inputElCache = new Map();
+const _slugLegacyCache = new Map();
+const _slugUniqueCache = new Map();
+const _smmMetricSlugCache = new Map();
+
 let _backupTimer = null;
+let _searchDebounceTimer = null;
 let _pendingLocalWrites = 0;
 let _lastLocalWriteTs = 0;
 const _dirtyInputKeys = new Set();
@@ -5883,7 +5890,59 @@ const _firebaseInputTimers = {};
 const _rafRecalcQueue = new Set();
 let _rafRecalcId = null;
 
-// 1. O(1) кэш DOM-инпутов вместо многократного document.querySelector
+let _activeTabId = 'traffic';
+const _dirtyTabs = new Set(['smm', 'organic', 'overview']);
+let _cachedMonthSummaries = [];
+let _firebaseRefs = [];
+
+// 1. Мемоизация тяжелых строковых функций (CPU Optimization)
+slugifyLegacy = function(text) {
+  let cached = _slugLegacyCache.get(text);
+  if (cached !== undefined) return cached;
+  cached = btoa(encodeURIComponent(text)).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+  _slugLegacyCache.set(text, cached);
+  return cached;
+};
+
+slugifyUnique = function(text) {
+  let cached = _slugUniqueCache.get(text);
+  if (cached !== undefined) return cached;
+  let hash = 0;
+  const str = String(text || '');
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  cached = slugifyLegacy(str).substring(0, 6) + Math.abs(hash).toString(36).substring(0, 4);
+  _slugUniqueCache.set(text, cached);
+  return cached;
+};
+
+getSMMMetricSlug = function(mI, cI, metricName) {
+  const ch = monthsData[mI]?.smmChannels?.[cI];
+  if (!ch || !Array.isArray(ch.metrics)) return slugifyLegacy(metricName);
+
+  const cacheKey = `${mI}_${cI}_${ch.metrics.length}_${metricName}`;
+  let cached = _smmMetricSlugCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const legacy = slugifyLegacy(metricName);
+  let countSame = 0;
+  let firstMatch = null;
+  for (let i = 0; i < ch.metrics.length; i++) {
+    if (slugifyLegacy(ch.metrics[i]) === legacy) {
+      if (countSame === 0) firstMatch = ch.metrics[i];
+      countSame++;
+      if (countSame > 1) break;
+    }
+  }
+
+  cached = (countSame <= 1 || firstMatch === metricName) ? legacy : slugifyUnique(metricName);
+  _smmMetricSlugCache.set(cacheKey, cached);
+  return cached;
+};
+
+// 2. O(1) поиск инпутов в DOM вместо document.querySelector
 function _getFastInputEl(key) {
   let el = _inputElCache.get(key);
   if (el && el.isConnected) return el;
@@ -5892,7 +5951,7 @@ function _getFastInputEl(key) {
   return el;
 }
 
-// 2. Отложенная запись в localStorage (не блокирует основной поток при вводе)
+// 3. Неблокирующий бекап в localStorage
 function _saveLocalBackupNow() {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
@@ -5905,17 +5964,17 @@ function _saveLocalBackupNow() {
   }
 }
 
-function saveLocalBackup() {
+saveLocalBackup = function() {
   if (_backupTimer) clearTimeout(_backupTimer);
-  _backupTimer = setTimeout(_saveLocalBackupNow, 1200);
-}
+  _backupTimer = setTimeout(_saveLocalBackupNow, 1500);
+};
 
 window.addEventListener('beforeunload', () => {
   if (_backupTimer) _saveLocalBackupNow();
 });
 
-// 3. Защита от локального эха Firebase при сохранении ячейки
-function persistInputKey(key, val) {
+// --- B. ТОЧЕЧНАЯ РАБОТА С FIREBASE БД (БЕЗ ПЕРЕЗАПИСИ ВСЕГО ДЕРЕВА) ---
+persistInputKey = function(key, val) {
   saveLocalBackup();
   if (isLocalMode || !db) {
     setSaveStatus('local');
@@ -5937,21 +5996,233 @@ function persistInputKey(key, val) {
     _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
     setSaveStatus('local');
   });
-}
+};
 
-// 4. Оптимизированный рендер (Overview и графики пересчитываются только когда открыты)
-function renderAll() {
-  _inputElCache.clear();
-  renderTraffic();
-  renderSMM();
-  renderOrganic();
-  if (document.getElementById('overview')?.classList.contains('active')) {
-    renderOverview();
+// Точечное сохранение поля месяца в Firebase вместо отправки всего массива monthsData
+function _saveMonthField(mI, field, value) {
+  saveLocalBackup();
+  lastMonthsJson = JSON.stringify(monthsData);
+  if (isLocalMode || !db) {
+    setSaveStatus('local');
+    return;
   }
+  setSaveStatus('saving');
+  db.ref(`kpi_project/monthsData/${mI}/${field}`).set(value)
+    .then(() => setSaveStatus('saved'))
+    .catch(() => setSaveStatus('local'));
 }
 
-// 5. Устранение медленных querySelector в расчетах дней SMM и Organic
-function calcSMMDaysToWeek(mI, cI, wI) {
+toggleMonth = function(i, el) {
+  if (!monthsData[i]) return;
+  monthsData[i].collapsed = !monthsData[i].collapsed;
+  _saveMonthField(i, 'collapsed', monthsData[i].collapsed);
+
+  if (el) {
+    const card = el.closest('.bento-card');
+    const wrapper = card ? card.querySelector('.month-body-wrapper') : null;
+    const icon = el.querySelector('.month-arrow');
+    if (wrapper) {
+      wrapper.classList.toggle('collapsed', monthsData[i].collapsed);
+      if (icon) icon.innerText = monthsData[i].collapsed ? '▼' : '▲';
+    }
+  }
+};
+
+updateWeekName = function(m, w, txtVal) {
+  const clean = (txtVal || '').trim();
+  if (monthsData[m] && monthsData[m].weeks && monthsData[m].weeks[w]) {
+    const nextTitle = clean || `${w + 1} нед.`;
+    if (monthsData[m].weeks[w].title === nextTitle) return;
+    monthsData[m].weeks[w].title = nextTitle;
+    _saveMonthField(m, `weeks/${w}/title`, nextTitle);
+  }
+};
+
+saveNote = function() {
+  if (activeNoteMonthIndex < 0 || !monthsData[activeNoteMonthIndex]) return;
+  const mI = activeNoteMonthIndex;
+  monthsData[mI].notes = document.getElementById('noteText').value.trim();
+  _saveMonthField(mI, 'notes', monthsData[mI].notes);
+  closeNoteModal();
+  renderAll();
+  showToast("Заметка сохранена");
+};
+
+// --- C. УМНЫЙ ДОМ-ДИФФИНГ, ЛЕНИВЫЕ ВКЛАДКИ И МГНОВЕННЫЕ ФИЛЬТРЫ ---
+_smartRenderList = function(containerId, itemsData, prefix, htmlGenerator) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const count = itemsData.length;
+
+  for (let i = 0; i < count; i++) {
+    const blockId = `${prefix}_block_${i}`;
+
+    if (!itemsData[i] || itemsData[i]._deleted) {
+      const el = document.getElementById(blockId);
+      if (el) el.remove();
+      continue;
+    }
+
+    const yearMatch = itemsData[i].name.match(/\d{4}/);
+    const year = yearMatch ? yearMatch[0] : '';
+    const matchYear = (currentFilterYear === 'All' || currentFilterYear === year);
+    const matchMonth = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
+    const isVisible = matchYear && matchMonth;
+
+    let block = document.getElementById(blockId);
+
+    // Если месяц скрыт фильтром и уже есть в DOM — просто скрываем его без генерации HTML
+    if (!isVisible && block) {
+      block.style.display = 'none';
+      continue;
+    }
+
+    const newHTML = htmlGenerator(itemsData[i], i);
+
+    if (!block) {
+      block = document.createElement('div');
+      block.className = 'bento-card';
+      block.id = blockId;
+      block.innerHTML = newHTML;
+      block._lastRawHtml = newHTML;
+      container.appendChild(block);
+    } else if (block._lastRawHtml !== newHTML) {
+      // Сравниваем с исходной строкой _lastRawHtml, а не с мутированным браузером innerHTML
+      const active = document.activeElement;
+      const activeId = active ? active.id : null;
+      const activeDataId = active ? active.getAttribute('data-id') : null;
+      const selStart = active ? active.selectionStart : 0;
+
+      block.innerHTML = newHTML;
+      block._lastRawHtml = newHTML;
+      _inputElCache.clear();
+
+      let newActive = activeId ? document.getElementById(activeId) : null;
+      if (!newActive && activeDataId) {
+        newActive = block.querySelector(`input[data-id="${activeDataId}"]`);
+      }
+      if (newActive) {
+        newActive.focus();
+        try { newActive.setSelectionRange(selStart, selStart); } catch (e) {}
+      }
+    }
+
+    block.style.display = isVisible ? 'block' : 'none';
+  }
+
+  const children = Array.from(container.children);
+  children.forEach(child => {
+    if (child.id && child.id.startsWith(prefix) && child.id.includes('_block_')) {
+      const idx = parseInt(child.id.split('_block_')[1], 10);
+      if (idx >= count) child.remove();
+    }
+  });
+
+  applyResponsiveTableWidths();
+  applyChannelSearchFilter();
+};
+
+function _renderSingleTab(tabId) {
+  _dirtyTabs.delete(tabId);
+  if (tabId === 'traffic') renderTraffic();
+  else if (tabId === 'smm') renderSMM();
+  else if (tabId === 'organic') renderOrganic();
+  else if (tabId === 'overview') renderOverview();
+}
+
+renderAll = function() {
+  _inputElCache.clear();
+  _smmMetricSlugCache.clear();
+  ['traffic', 'smm', 'organic', 'overview'].forEach(t => _dirtyTabs.add(t));
+  _renderSingleTab(_activeTabId);
+};
+
+openTab = function(t, btn) {
+  _activeTabId = t;
+  document.querySelectorAll('.kpi-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.kpi-tab-btn').forEach(e => e.classList.remove('active'));
+  const target = document.getElementById(t);
+  if (target) target.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  if (_dirtyTabs.has(t) || t === 'overview') {
+    _renderSingleTab(t);
+  }
+};
+
+// Мгновенная фильтрация без пересборки таблиц, если блоки уже отрендерены
+function _applyFastMonthVisibility() {
+  ['tr', 'smm', 'org'].forEach(prefix => {
+    monthsData.forEach((m, i) => {
+      if (!m || m._deleted) return;
+      const block = document.getElementById(`${prefix}_block_${i}`);
+      if (!block) return;
+      const year = m.name.match(/\d{4}/)?.[0] || '';
+      const matchY = (currentFilterYear === 'All' || currentFilterYear === year);
+      const matchM = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
+      block.style.display = (matchY && matchM) ? 'block' : 'none';
+    });
+  });
+  if (_activeTabId === 'overview') renderOverview();
+}
+
+changeFilterYear = function(year) {
+  currentFilterYear = year;
+  currentFilterMonth = 'All';
+  updateFilterDropdowns();
+  _applyFastMonthVisibility();
+};
+
+changeFilterMonth = function(mIdx) {
+  currentFilterMonth = mIdx;
+  _applyFastMonthVisibility();
+};
+
+onChannelSearch = function(val) {
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer = setTimeout(() => {
+    currentChannelSearch = (val || '').trim().toLowerCase();
+    const clearBtn = document.getElementById('searchClearBtn');
+    if (clearBtn) clearBtn.style.display = currentChannelSearch ? 'block' : 'none';
+    applyChannelSearchFilter();
+  }, 120);
+};
+
+// Мгновенное сворачивание недель и дней напрямую в DOM (0 мс вместо полного рендера)
+toggleWeek = function(mI, cI, wI, type = 'traffic') {
+  const key = uiKeyWeekCollapsed(mI, cI, wI);
+  const next = !inputState[key];
+  inputState[key] = next;
+  persistInputKey(key, next);
+
+  const attr = type === 'smm' ? 'data-smm-week-group' : 'data-week-group';
+  const rows = document.querySelectorAll(`tr[${attr}="m${mI}_c${cI}_w${wI}"]`);
+  rows.forEach(r => r.classList.toggle('week-collapsed', next));
+
+  const btn = document.querySelector(`button[onclick="toggleWeek(${mI},${cI},${wI}${type === 'smm' ? ",'smm'" : ''})"]`);
+  if (btn) btn.innerText = next ? '▸' : '▾';
+};
+
+toggleDays = function(uniqueId) {
+  const stateKey = 'ui_days_expanded_' + uniqueId;
+  const next = !inputState[stateKey];
+  inputState[stateKey] = next;
+  persistInputKey(stateKey, next);
+
+  const dayRows = document.querySelectorAll(`.day-row-${uniqueId}`);
+  if (dayRows.length > 0) {
+    dayRows.forEach(r => r.classList.toggle('active', next));
+    const btn = document.querySelector(`button[onclick="toggleDays('${uniqueId}')"]`);
+    if (btn) btn.classList.toggle('active', next);
+  } else {
+    if (uniqueId.startsWith('smm_')) renderSMM();
+    else if (uniqueId.startsWith('org_')) renderOrganic();
+    else renderTraffic();
+  }
+};
+
+// --- D. БЫСТРЫЙ ПЕРЕСЧЕТ ДНЕЙ И НЕБЛОКИРУЮЩИЙ ВВОД ---
+calcSMMDaysToWeek = function(mI, cI, wI) {
   const month = monthsData[mI];
   if (!month || month._deleted) return;
 
@@ -5969,10 +6240,9 @@ function calcSMMDaysToWeek(mI, cI, wI) {
     let totalReach = 0;
     let hasErrDayData = false;
 
-    days.forEach((d, dI) => {
+    for (let dI = 0; dI < days.length; dI++) {
       const rVal = inputState[getSMMDayKey(mI, cI, wI, dI, reachMet)];
       const eVal = inputState[getSMMDayKey(mI, cI, wI, dI, errMet)];
-
       if (rVal !== undefined && rVal !== null && rVal !== '' && eVal !== undefined && eVal !== null && eVal !== '') {
         const r = +rVal;
         const e = +eVal;
@@ -5982,14 +6252,14 @@ function calcSMMDaysToWeek(mI, cI, wI) {
           hasErrDayData = true;
         }
       }
-    });
-
+    }
     if (hasErrDayData && totalReach > 0) {
       weightedErrFact = (totalReactions / totalReach) * 100;
     }
   }
 
-  ch.metrics.forEach(metricName => {
+  for (let mIdx = 0; mIdx < ch.metrics.length; mIdx++) {
+    const metricName = ch.metrics[mIdx];
     const isPct = isPercentMetric(metricName);
     const isErr = metricName.toLowerCase().includes('err');
 
@@ -6000,14 +6270,13 @@ function calcSMMDaysToWeek(mI, cI, wI) {
     if (isErr && weightedErrFact !== null) {
       finalVal = weightedErrFact;
     } else {
-      days.forEach((d, dI) => {
+      for (let dI = 0; dI < days.length; dI++) {
         const val = inputState[getSMMDayKey(mI, cI, wI, dI, metricName)];
         if (val !== undefined && val !== null && val !== '') {
           sum += (+val || 0);
           cnt += 1;
         }
-      });
-
+      }
       if (cnt > 0) {
         finalVal = (isPct && !isErr) ? (sum / cnt) : sum;
       }
@@ -6027,10 +6296,10 @@ function calcSMMDaysToWeek(mI, cI, wI) {
       el.classList.remove('cell-auto-sum');
       el.title = '';
     }
-  });
-}
+  }
+};
 
-function calcOrgDaysToWeek(mI, wI, cI) {
+calcOrgDaysToWeek = function(mI, wI, cI) {
   const month = monthsData[mI];
   if (!month || month._deleted) return;
 
@@ -6041,7 +6310,7 @@ function calcOrgDaysToWeek(mI, wI, cI) {
   let sumV = 0, sumL = 0, sumRev = 0;
   let hasDayV = false, hasDayL = false, hasDayRev = false;
 
-  weekObj.days.forEach((d, dI) => {
+  for (let dI = 0; dI < weekObj.days.length; dI++) {
     const dayId = `${rowId}_d${dI}_c${cI}`;
     const rawV = inputState[`${dayId}_visits`];
     const rawL = inputState[`${dayId}_leads`];
@@ -6063,7 +6332,7 @@ function calcOrgDaysToWeek(mI, wI, cI) {
     if (elDayCr) {
       elDayCr.innerText = vV > 0 && vL > 0 ? formatPercent((vL / vV) * 100) : '-';
     }
-  });
+  }
 
   const wInpV = _getFastInputEl(`${rowId}_c${cI}_fact_visits`);
   if (hasDayV) {
@@ -6097,11 +6366,11 @@ function calcOrgDaysToWeek(mI, wI, cI) {
   } else if (wInpRev) {
     wInpRev.classList.remove('cell-auto-sum');
   }
-}
+};
 
-// 6. Неблокирующий пересчет через requestAnimationFrame и умный Blur без лишних запросов
 function _scheduleRecalcForId(id) {
   _rafRecalcQueue.add(id);
+  _dirtyTabs.add('overview');
   if (_rafRecalcId) return;
   _rafRecalcId = requestAnimationFrame(() => {
     _rafRecalcId = null;
@@ -6115,7 +6384,7 @@ function _scheduleRecalcForId(id) {
   });
 }
 
-function onCellBlur(el) {
+onCellBlur = function(el) {
   const id = el.dataset.id;
   if (!id) return;
   const kind = el.dataset.kind || 'count';
@@ -6123,18 +6392,12 @@ function onCellBlur(el) {
   const wasEdited = el.dataset.edited === "true";
   el.dataset.edited = "false";
 
-  // Если пользователь просто кликнул по ячейке и ушел без правок — только возвращаем маску
   if (!wasEdited) {
     const existing = inputState[id];
-    if (existing === undefined || existing === null || existing === '') {
-      el.value = '';
-    } else if (kind === 'money') {
-      el.value = formatMoney(existing);
-    } else if (kind === 'percent') {
-      el.value = formatPercent(existing);
-    } else {
-      el.value = formatCount(existing);
-    }
+    if (existing === undefined || existing === null || existing === '') el.value = '';
+    else if (kind === 'money') el.value = formatMoney(existing);
+    else if (kind === 'percent') el.value = formatPercent(existing);
+    else el.value = formatCount(existing);
     return;
   }
 
@@ -6163,9 +6426,9 @@ function onCellBlur(el) {
   else el.value = formatCount(n);
 
   _scheduleRecalcForId(id);
-}
+};
 
-function setupEventListeners() {
+setupEventListeners = function() {
   const handleInput = (e) => {
     const el = e.target;
     if (!el || !el.classList.contains('cell-input')) return;
@@ -6189,7 +6452,7 @@ function setupEventListeners() {
     _firebaseInputTimers[id] = setTimeout(() => {
       delete _firebaseInputTimers[id];
       persistInputKey(id, inputState[id] ?? null);
-    }, 700);
+    }, 650);
   };
 
   const handleFocus = (e) => {
@@ -6208,92 +6471,220 @@ function setupEventListeners() {
       c.addEventListener('focusout', handleBlur);
     }
   });
-}
+};
 
-// 7. Быстрый softUpdateUI за один проход и фильтрация собственных событий Firebase
-function softUpdateUI() {
-  document.querySelectorAll('.cell-input[data-id]').forEach(el => {
-    if (document.activeElement === el) return;
-    const key = el.dataset.id;
-    const val = inputState[key];
+// --- E. ПЕРЕИСПОЛЬЗОВАНИЕ CHART.JS БЕЗ DESTROY И БЫСТРАЯ СОРТИРОВКА ---
+createLineChart = function(canvasId, labels, label1, data1, color1, label2, data2) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  const colors = getChartColors();
+  const isBar = currentChartType === 'bar';
+  const targetType = isBar ? 'bar' : 'line';
+  const existing = chartInstances[canvasId];
+
+  // Если график уже создан и тип не изменился — обновляем данные на месте без пересоздания Canvas
+  if (existing && existing.config.type === targetType) {
+    existing.data.labels = labels;
+    existing.data.datasets[0].label = label1;
+    existing.data.datasets[0].data = data1;
+    existing.data.datasets[0].borderColor = color1;
+    existing.data.datasets[0].backgroundColor = isBar ? color1 + 'cc' : color1;
+
+    existing.data.datasets[1].label = label2;
+    existing.data.datasets[1].data = data2;
+    existing.data.datasets[1].borderColor = isBar ? '#64748b' : color1;
+    existing.data.datasets[1].backgroundColor = isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent';
+
+    existing.options.plugins.legend.labels.color = colors.text;
+    existing.options.scales.x.grid.color = colors.grid;
+    existing.options.scales.x.ticks.color = colors.text;
+    existing.options.scales.y.grid.color = colors.grid;
+    existing.options.scales.y.ticks.color = colors.text;
+
+    existing.update('none');
+    return;
+  }
+
+  if (existing) existing.destroy();
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: targetType,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: label1,
+          data: data1,
+          borderColor: color1,
+          backgroundColor: isBar ? color1 + 'cc' : color1,
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          tension: 0.3,
+          pointRadius: isBar ? 0 : 3.5
+        },
+        {
+          label: label2,
+          data: data2,
+          borderColor: isBar ? '#64748b' : color1,
+          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          borderDash: isBar ? [] : [6, 4],
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: colors.text,
+            font: { family: 'Inter', weight: '600', size: 11 }
+          }
+        },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
+        },
+        y: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+};
+
+const _origRenderCompareTable = renderCompareTable;
+renderCompareTable = function(monthSummaries) {
+  _cachedMonthSummaries = monthSummaries || [];
+  _origRenderCompareTable(_cachedMonthSummaries);
+};
+
+// Сортировка таблицы сравнения больше не вызывает пересчет всех месяцев и перерисовку 6 графиков
+sortCompareTableBy = function(col) {
+  if (compareSortCol === col) {
+    compareSortAsc = !compareSortAsc;
+  } else {
+    compareSortCol = col;
+    compareSortAsc = false;
+  }
+  _origRenderCompareTable(_cachedMonthSummaries);
+};
+
+// --- F. ГРАНУЛЯРНАЯ REALTIME-СИНХРОНИЗАЦИЯ FIREBASE (ДЛЯ 1-2 ПОЛЬЗОВАТЕЛЕЙ) ---
+function _applyRemoteCellChange(key, val) {
+  if (_dirtyInputKeys.has(key)) return;
+
+  if (val === null || val === undefined) {
+    delete inputState[key];
+  } else {
+    inputState[key] = val;
+  }
+
+  if (key.startsWith('ui_')) {
+    const newUiHash = getUiHash(inputState);
+    if (newUiHash !== lastUiHash) {
+      lastUiHash = newUiHash;
+      renderAll();
+    }
+    return;
+  }
+
+  const el = _getFastInputEl(key);
+  if (el && document.activeElement !== el) {
     const kind = el.dataset.kind || 'count';
-    const formatted = (val === undefined || val === null || val === '')
+    el.value = (val === null || val === undefined || val === '')
       ? ''
       : (kind === 'money' ? formatMoney(val) : (kind === 'percent' ? formatPercent(val) : formatCount(val)));
-    if (el.value !== formatted) el.value = formatted;
-  });
-
-  recalcAll();
-  recalcAllSMM();
-  recalcAllOrganic();
-  if (document.getElementById('overview')?.classList.contains('active')) {
-    renderOverview();
   }
+
+  _scheduleRecalcForId(key);
+  saveLocalBackup();
 }
 
-function initFirebaseListener(callback) {
+initFirebaseListener = function(callback) {
   if (!db) {
     if (callback) callback(false);
     return;
   }
-  if (dbListenerRef) db.ref('kpi_project').off('value', dbListenerRef);
 
-  dbListenerRef = db.ref('kpi_project').on('value', (snapshot) => {
+  if (dbListenerRef) {
+    db.ref('kpi_project').off('value', dbListenerRef);
+    dbListenerRef = null;
+  }
+  _firebaseRefs.forEach(item => item.ref.off(item.event, item.fn));
+  _firebaseRefs = [];
+
+  // Шаг 1: Быстрая однократная загрузка начального слепка
+  db.ref('kpi_project').once('value').then((snapshot) => {
     const data = snapshot.val();
-
     if (data) {
-      const newMonthsData = data.monthsData || [];
-      const incomingState = data.inputState || {};
-
-      const newJson = JSON.stringify(newMonthsData);
-      const newUiHash = getUiHash(incomingState);
-
-      const isStructureChanged = newJson !== lastMonthsJson;
-      const isUiChanged = newUiHash !== lastUiHash;
-
-      // Игнорируем обратное эхо от нашего собственного ввода, чтобы не вешать интерфейс
-      if (!isStructureChanged && !isUiChanged && (_pendingLocalWrites > 0 || (Date.now() - _lastLocalWriteTs < 1800))) {
-        let hasExternalDiff = false;
-        Object.keys(incomingState).forEach(k => {
-          if (!_dirtyInputKeys.has(k) && inputState[k] !== incomingState[k]) {
-            inputState[k] = incomingState[k];
-            hasExternalDiff = true;
-          }
-        });
-        if (!hasExternalDiff) {
-          setSaveStatus('online');
-          if (callback) callback(true);
-          return;
-        }
-      } else {
-        _dirtyInputKeys.forEach(k => {
-          if (inputState[k] !== undefined) incomingState[k] = inputState[k];
-          else delete incomingState[k];
-        });
-        inputState = incomingState;
-      }
-
-      monthsData = newMonthsData;
-      lastMonthsJson = newJson;
-      lastUiHash = newUiHash;
-
+      monthsData = data.monthsData || [];
+      inputState = data.inputState || {};
+      lastMonthsJson = JSON.stringify(monthsData);
+      lastUiHash = getUiHash(inputState);
       saveLocalBackup();
       updateFilterDropdowns();
-
-      if (isStructureChanged || isUiChanged) renderAll();
-      else softUpdateUI();
-    } else {
-      if (monthsData.length === 0) addNewMonth();
+      renderAll();
+    } else if (monthsData.length === 0) {
+      addNewMonth();
     }
 
     setSaveStatus('online');
     if (callback) callback(true);
-  }, (error) => {
+
+    // Шаг 2: Подписка отдельно на структуру месяцев
+    const monthsRef = db.ref('kpi_project/monthsData');
+    const onMonthsChange = (snap) => {
+      const newMonths = snap.val() || [];
+      const newJson = JSON.stringify(newMonths);
+      if (newJson !== lastMonthsJson) {
+        monthsData = newMonths;
+        lastMonthsJson = newJson;
+        saveLocalBackup();
+        updateFilterDropdowns();
+        renderAll();
+      }
+    };
+    monthsRef.on('value', onMonthsChange);
+    _firebaseRefs.push({ ref: monthsRef, event: 'value', fn: onMonthsChange });
+
+    // Шаг 3: Точечные подписки на ячейки inputState (передают по 20 байт вместо всей БД)
+    const stateRef = db.ref('kpi_project/inputState');
+    const onChildChanged = (snap) => _applyRemoteCellChange(snap.key, snap.val());
+    const onChildAdded = (snap) => {
+      if (inputState[snap.key] !== snap.val()) {
+        _applyRemoteCellChange(snap.key, snap.val());
+      }
+    };
+    const onChildRemoved = (snap) => _applyRemoteCellChange(snap.key, null);
+
+    stateRef.on('child_changed', onChildChanged);
+    stateRef.on('child_added', onChildAdded);
+    stateRef.on('child_removed', onChildRemoved);
+
+    _firebaseRefs.push(
+      { ref: stateRef, event: 'child_changed', fn: onChildChanged },
+      { ref: stateRef, event: 'child_added', fn: onChildAdded },
+      { ref: stateRef, event: 'child_removed', fn: onChildRemoved }
+    );
+  }).catch((error) => {
     console.warn("Firebase Access/Network Error:", error.code);
     setSaveStatus('error');
     if (callback) callback(false);
   });
-}
+};
    
 /* =============================================================
    15. APPLICATION BOOTSTRAP
