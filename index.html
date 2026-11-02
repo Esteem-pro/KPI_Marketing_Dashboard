@@ -43,7 +43,6 @@ body.theme-dark, .theme-dark {
   --bad: #f43f5e;
   --bad-soft: rgba(244, 63, 94, 0.14);
   --accent-soft: rgba(59, 130, 246, 0.14);
-  --purple-soft: rgba(139, 92, 246, 0.14);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.5);
@@ -78,7 +77,6 @@ body.theme-light, .theme-light {
   --bad: #e11d48;
   --bad-soft: rgba(225, 29, 72, 0.12);
   --accent-soft: rgba(37, 99, 235, 0.1);
-  --purple-soft: rgba(124, 58, 237, 0.1);
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
   --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.12);
@@ -158,14 +156,15 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--tx-accent), #8b5cf6);
+  background: var(--tx-main);
+  color: var(--bg-card);
+  border: 1px solid var(--bd-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
   font-size: 20px;
   font-weight: 900;
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.28);
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
 }
 
@@ -270,51 +269,6 @@ body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-box svg {
-  position: absolute;
-  left: 11px;
-  color: var(--tx-sec);
-  pointer-events: none;
-}
-
-.search-input {
-  background: var(--bg-elevated);
-  border: 1px solid var(--bd);
-  color: var(--tx-main);
-  padding: 8px 28px 8px 32px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  width: 190px;
-  outline: none;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.search-input:focus {
-  border-color: var(--tx-accent);
-  width: 230px;
-  background: var(--bg-card);
-}
-
-.search-clear {
-  position: absolute;
-  right: 8px;
-  background: none;
-  border: none;
-  color: var(--tx-sec);
-  cursor: pointer;
-  font-size: 14px;
-  display: none;
-  padding: 0;
 }
 
 /* Status Pill & Action Icons */
@@ -439,13 +393,6 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
-}
-
-.hotkeys-hint {
-  font-size: 11px;
-  color: var(--tx-muted);
-  padding: 0 6px;
-  font-weight: 500;
 }
 
 .kpi-btn {
@@ -611,7 +558,7 @@ body {
   width: 0%;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--tx-accent), #8b5cf6);
+  background: var(--tx-accent);
   transition: width 0.4s ease;
 }
 
@@ -1510,11 +1457,9 @@ textarea.modal-input {
         </div>
 
         <div class="header-controls">
-          <div class="search-box" title="Быстрый фильтр по названию канала">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="channelSearchInput" class="search-input" placeholder="Поиск канала..." oninput="onChannelSearch(this.value)">
-            <button class="search-clear" id="searchClearBtn" onclick="clearChannelSearch()">×</button>
-          </div>
+        <select id="channelFilter" class="kpi-select" onchange="changeFilterChannel(this.value)" title="Фильтр по каналу">
+            <option value="All">Все каналы</option>
+          </select>
 
           <select id="yearFilter" class="kpi-select" onchange="changeFilterYear(this.value)" title="Фильтр по году">
             <option value="All">Все года</option>
@@ -1527,10 +1472,6 @@ textarea.modal-input {
           <button class="kpi-btn" onclick="openDataHubModal()" title="Импорт, экспорт и резервное копирование">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             Данные
-          </button>
-           
-          <button class="theme-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Сменить тему (Alt+T)">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
           </button>
 
           <button class="theme-btn" onclick="googleLogout()" title="Сменить режим / Выйти">
@@ -1571,9 +1512,6 @@ textarea.modal-input {
         <button class="kpi-btn btn-primary" onclick="addNewMonth()">+ Новый месяц</button>
         <button class="kpi-btn" onclick="toggleAllMonths(true)">Свернуть все</button>
         <button class="kpi-btn" onclick="toggleAllMonths(false)">Развернуть все</button>
-      </div>
-      <div class="toolbar-right">
-        <span class="hotkeys-hint">Alt+1..4 разделы · Alt+N месяц · Alt+T тема</span>
       </div>
     </div>
 
@@ -1919,7 +1857,9 @@ function saveUserPrefs() {
     localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify({
       isDark,
       isCompactDensity,
-      globalTableView
+      globalTableView,
+      currentFilterYear,
+      currentFilterMonth
     }));
   } catch (e) {}
 }
@@ -1932,6 +1872,8 @@ function loadUserPrefs() {
     if (typeof p.isDark === 'boolean') isDark = p.isDark;
     if (typeof p.isCompactDensity === 'boolean') isCompactDensity = p.isCompactDensity;
     if (p.globalTableView === 'full' || p.globalTableView === 'standard') globalTableView = p.globalTableView;
+    if (p.currentFilterYear !== undefined) currentFilterYear = String(p.currentFilterYear);
+    if (p.currentFilterMonth !== undefined) currentFilterMonth = String(p.currentFilterMonth);
   } catch (e) {}
 }
 
@@ -2294,8 +2236,54 @@ function updateFilterDropdowns() {
     });
     ovSelect.innerHTML = ovHtml;
   }
+   updateChannelFilterDropdown();
 }
 
+function updateChannelFilterDropdown() {
+  const chSelect = document.getElementById('channelFilter');
+  if (!chSelect) return;
+
+  const activeTabEl = document.querySelector('.kpi-content.active');
+  const activeTab = activeTabEl ? activeTabEl.id : 'traffic';
+  const channelsSet = new Set();
+
+  monthsData.forEach((m, idx) => {
+    if (!m || m._deleted) return;
+    const yearMatch = m.name.match(/\d{4}/);
+    const y = yearMatch ? yearMatch[0] : '';
+    if (currentFilterYear !== 'All' && currentFilterYear !== y) return;
+    if (currentFilterMonth !== 'All' && String(currentFilterMonth) !== String(idx)) return;
+
+    if (activeTab === 'traffic' || activeTab === 'overview') {
+      (m.channels || []).forEach(c => {
+        if (c && c !== '__deleted__') channelsSet.add(c);
+      });
+    }
+    if (activeTab === 'smm' || activeTab === 'overview') {
+      (m.smmChannels || []).forEach(c => {
+        if (c && !c._deleted && c.name) channelsSet.add(c.name);
+      });
+    }
+    if (activeTab === 'organic' || activeTab === 'overview') {
+      (m.organicChannels || []).forEach(c => {
+        if (c && c !== '__deleted__') channelsSet.add(c);
+      });
+    }
+  });
+
+  const sortedChannels = Array.from(channelsSet);
+  if (currentChannelSearch && !sortedChannels.some(c => c.toLowerCase() === currentChannelSearch)) {
+    currentChannelSearch = '';
+  }
+
+  let html = `<option value="All">Все каналы (${sortedChannels.length})</option>`;
+  sortedChannels.forEach(ch => {
+    const isSel = ch.toLowerCase() === currentChannelSearch ? 'selected' : '';
+    html += `<option value="${escapeHtml(ch)}" ${isSel}>${escapeHtml(ch)}</option>`;
+  });
+  chSelect.innerHTML = html;
+}
+   
 function updateYearFilterDropdown() {
   updateFilterDropdowns();
 }
@@ -2317,23 +2305,15 @@ function changeOverviewFocusMonth(val) {
   renderOverview();
 }
 
-function onChannelSearch(val) {
-  currentChannelSearch = (val || '').trim().toLowerCase();
-  const clearBtn = document.getElementById('searchClearBtn');
-  if (clearBtn) clearBtn.style.display = currentChannelSearch ? 'block' : 'none';
+function changeFilterChannel(val) {
+  currentChannelSearch = (!val || val === 'All') ? '' : val.trim().toLowerCase();
   applyChannelSearchFilter();
-}
-
-function clearChannelSearch() {
-  const inp = document.getElementById('channelSearchInput');
-  if (inp) inp.value = '';
-  onChannelSearch('');
 }
 
 function applyChannelSearchFilter() {
   document.querySelectorAll('.channel-card:not(.total-card)').forEach(card => {
-    const chName = (card.getAttribute('data-channel-name') || '').toLowerCase();
-    if (!currentChannelSearch || chName.includes(currentChannelSearch)) {
+    const chName = (card.getAttribute('data-channel-name') || '').trim().toLowerCase();
+    if (!currentChannelSearch || chName === currentChannelSearch) {
       card.style.display = '';
     } else {
       card.style.display = 'none';
@@ -5616,12 +5596,16 @@ function renderDev(el, plan, fact, invert, timeProgress = 1, isRate = false) {
 }
 
 function initCharts(labels, sF, sP, lF, lP, cF, cP, slF, slP, srF, srP, ssF, ssP) {
-  createLineChart('chartTrafficSpend', labels, 'Расход Факт', sF, '#3b82f6', 'Расход План', sP);
-  createLineChart('chartTrafficLeads', labels, 'Лиды Факт', lF, '#10b981', 'Лиды План', lP);
-  createLineChart('chartCPL', labels, 'CPL Факт', cF, '#f59e0b', 'CPL План', cP);
-  createLineChart('chartSMMLeads', labels, 'SMM Лиды Факт', slF, '#8b5cf6', 'SMM Лиды План', slP);
-  createLineChart('chartSMMSubs', labels, 'Приток Факт', ssF, '#f43f5e', 'Приток План', ssP);
-  createLineChart('chartSMMReach', labels, 'Охват Факт', srF, '#06b6d4', 'Охват План', srP);
+  const primaryFact = isDark ? '#e2e8f0' : '#0f172a';
+  const accentFact = isDark ? '#3b82f6' : '#2563eb';
+  const slateFact = isDark ? '#94a3b8' : '#475569';
+
+  createLineChart('chartTrafficSpend', labels, 'Расход Факт', sF, primaryFact, 'Расход План', sP);
+  createLineChart('chartTrafficLeads', labels, 'Лиды Факт', lF, accentFact, 'Лиды План', lP);
+  createLineChart('chartCPL', labels, 'CPL Факт', cF, slateFact, 'CPL План', cP);
+  createLineChart('chartSMMLeads', labels, 'SMM Лиды Факт', slF, accentFact, 'SMM Лиды План', slP);
+  createLineChart('chartSMMSubs', labels, 'Приток Факт', ssF, primaryFact, 'Приток План', ssP);
+  createLineChart('chartSMMReach', labels, 'Охват Факт', srF, slateFact, 'Охват План', srP);
 }
 
 function createLineChart(canvasId, labels, label1, data1, color1, label2, data2) {
@@ -5766,32 +5750,6 @@ function initFirebaseListener(callback) {
   });
 }
 
-/**
- * FIXED BUG: Uses `e.code` alongside `e.key` so Alt+N / Alt+T / Alt+R
- * work seamlessly even when the Russian keyboard layout (Т / Е / К) is active.
- */
-document.addEventListener('keydown', function(e) {
-  if (!e.altKey) return;
-
-  const tabs = document.querySelectorAll('.kpi-tab-btn');
-  const code = e.code;
-  const key = (e.key || '').toLowerCase();
-
-  if ((code === 'Digit1' || key === '1') && tabs[0]) { e.preventDefault(); tabs[0].click(); }
-  if ((code === 'Digit2' || key === '2') && tabs[1]) { e.preventDefault(); tabs[1].click(); }
-  if ((code === 'Digit3' || key === '3') && tabs[2]) { e.preventDefault(); tabs[2].click(); }
-  if ((code === 'Digit4' || key === '4') && tabs[3]) { e.preventDefault(); tabs[3].click(); }
-
-  if (code === 'KeyN' || key === 'n' || key === 'т') {
-    e.preventDefault();
-    addNewMonth();
-  }
-
-  if (code === 'KeyT' || key === 't' || key === 'е') {
-    e.preventDefault();
-    toggleTheme();
-  }
-});
 
 /* =============================================================
    ENTERPRISE PERFORMANCE & REALTIME PATCH v2.0 (ALL-IN-ONE)
@@ -5805,7 +5763,6 @@ const _slugUniqueCache = new Map();
 const _smmMetricSlugCache = new Map();
 
 let _backupTimer = null;
-let _searchDebounceTimer = null;
 let _pendingLocalWrites = 0;
 let _lastLocalWriteTs = 0;
 const _dirtyInputKeys = new Set();
@@ -6068,8 +6025,11 @@ openTab = function(t, btn) {
   if (target) target.classList.add('active');
   if (btn) btn.classList.add('active');
 
+  updateChannelFilterDropdown();
   if (_dirtyTabs.has(t) || t === 'overview') {
     _renderSingleTab(t);
+  } else {
+    applyChannelSearchFilter();
   }
 };
 
@@ -6092,23 +6052,18 @@ function _applyFastMonthVisibility() {
 changeFilterYear = function(year) {
   currentFilterYear = year;
   currentFilterMonth = 'All';
+  saveUserPrefs();
   updateFilterDropdowns();
   _applyFastMonthVisibility();
+  applyChannelSearchFilter();
 };
 
 changeFilterMonth = function(mIdx) {
   currentFilterMonth = mIdx;
+  saveUserPrefs();
+  updateChannelFilterDropdown();
   _applyFastMonthVisibility();
-};
-
-onChannelSearch = function(val) {
-  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
-  _searchDebounceTimer = setTimeout(() => {
-    currentChannelSearch = (val || '').trim().toLowerCase();
-    const clearBtn = document.getElementById('searchClearBtn');
-    if (clearBtn) clearBtn.style.display = currentChannelSearch ? 'block' : 'none';
-    applyChannelSearchFilter();
-  }, 120);
+  applyChannelSearchFilter();
 };
 
 // Мгновенное сворачивание недель и дней напрямую в DOM (0 мс вместо полного рендера)
