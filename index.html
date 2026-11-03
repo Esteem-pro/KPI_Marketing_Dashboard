@@ -3727,7 +3727,9 @@ function calcGrand(m) {
     }
   });
 
-  const fc = activeDays > 0 ? Math.round((s.fl / activeDays) * totalDays) : 0;
+const elapsedCalendarDays = Math.max(1, Math.round(timeProgress * totalDays));
+  const effectiveActiveDays = timeProgress < 1 ? Math.min(activeDays, elapsedCalendarDays) : activeDays;
+  const fc = effectiveActiveDays > 0 ? Math.round((s.fl / effectiveActiveDays) * totalDays) : 0;
   txt(`${m}_stat_forecast`, fCount(fc));
 
   const bar = document.getElementById(`${m}_monthbar`);
