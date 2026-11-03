@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -4699,7 +4700,7 @@ function calcSMMChannelTotal(mI, cI) {
     if (isErr && hasErrPair) {
       sumPlan = channelErrStats.pReach > 0 ? (channelErrStats.pReactions / channelErrStats.pReach) * 100 : 0;
       sumFact = channelErrStats.fReach > 0 ? (channelErrStats.fReactions / channelErrStats.fReach) * 100 : 0;
-     } else {
+    } else {
       let planWeeksCount = 0;
       let factWeeksCount = 0;
 
@@ -5765,94 +5766,94 @@ function initCharts(labels, sF, sP, lF, lP, cF, cP, slF, slP, srF, srP, ssF, ssP
 }
 
 createLineChart = function(canvasId, labels, label1, data1, color1, label2, data2) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
 
-  const colors = getChartColors();
-  const isBar = currentChartType === 'bar';
-  const targetType = isBar ? 'bar' : 'line';
-  const existing = chartInstances[canvasId];
+  const colors = getChartColors();
+  const isBar = currentChartType === 'bar';
+  const targetType = isBar ? 'bar' : 'line';
+  const existing = chartInstances[canvasId];
 
-  // Если график уже создан и тип не изменился — обновляем данные на месте без пересоздания Canvas
-  if (existing && existing.config.type === targetType) {
-    existing.data.labels = labels;
-    existing.data.datasets[0].label = label1;
-    existing.data.datasets[0].data = data1;
-    existing.data.datasets[0].borderColor = color1;
-    existing.data.datasets[0].backgroundColor = isBar ? color1 + 'cc' : color1;
+  // Если график уже создан и тип не изменился — обновляем данные на месте без пересоздания Canvas
+  if (existing && existing.config.type === targetType) {
+    existing.data.labels = labels;
+    existing.data.datasets[0].label = label1;
+    existing.data.datasets[0].data = data1;
+    existing.data.datasets[0].borderColor = color1;
+    existing.data.datasets[0].backgroundColor = isBar ? color1 + 'cc' : color1;
 
-    existing.data.datasets[1].label = label2;
-    existing.data.datasets[1].data = data2;
-    existing.data.datasets[1].borderColor = isBar ? '#64748b' : color1;
-    existing.data.datasets[1].backgroundColor = isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent';
+    existing.data.datasets[1].label = label2;
+    existing.data.datasets[1].data = data2;
+    existing.data.datasets[1].borderColor = isBar ? '#64748b' : color1;
+    existing.data.datasets[1].backgroundColor = isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent';
 
-    existing.options.plugins.legend.labels.color = colors.text;
-    existing.options.scales.x.grid.color = colors.grid;
-    existing.options.scales.x.ticks.color = colors.text;
-    existing.options.scales.y.grid.color = colors.grid;
-    existing.options.scales.y.ticks.color = colors.text;
+    existing.options.plugins.legend.labels.color = colors.text;
+    existing.options.scales.x.grid.color = colors.grid;
+    existing.options.scales.x.ticks.color = colors.text;
+    existing.options.scales.y.grid.color = colors.grid;
+    existing.options.scales.y.ticks.color = colors.text;
 
-    existing.update('none');
-    return;
-  }
+    existing.update('none');
+    return;
+  }
 
-  if (existing) existing.destroy();
+  if (existing) existing.destroy();
 
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: targetType,
-    data: {
-      labels,
-      datasets: [
-        {
-          label: label1,
-          data: data1,
-          borderColor: color1,
-          backgroundColor: isBar ? color1 + 'cc' : color1,
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          tension: 0.3,
-          pointRadius: isBar ? 0 : 3.5
-        },
-        {
-          label: label2,
-          data: data2,
-          borderColor: isBar ? '#64748b' : color1,
-          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          borderDash: isBar ? [] : [6, 4],
-          tension: 0.3,
-          pointRadius: 0,
-          pointHoverRadius: 0
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: {
-        legend: {
-          labels: {
-            color: colors.text,
-            font: { family: 'Inter', weight: '600', size: 11 }
-          }
-        },
-        tooltip: { mode: 'index', intersect: false }
-      },
-      scales: {
-        x: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
-        },
-        y: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
-          beginAtZero: true
-        }
-      }
-    }
-  });
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: targetType,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: label1,
+          data: data1,
+          borderColor: color1,
+          backgroundColor: isBar ? color1 + 'cc' : color1,
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          tension: 0.3,
+          pointRadius: isBar ? 0 : 3.5
+        },
+        {
+          label: label2,
+          data: data2,
+          borderColor: isBar ? '#64748b' : color1,
+          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          borderDash: isBar ? [] : [6, 4],
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: colors.text,
+            font: { family: 'Inter', weight: '600', size: 11 }
+          }
+        },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
+        },
+        y: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
+          beginAtZero: true
+        }
+      }
+    }
+  });
 };
 
 /* =============================================================
@@ -5867,76 +5868,90 @@ function getUiHash(state) {
 }
 
 initFirebaseListener = function(callback) {
-  if (!db) {
-    if (callback) callback(false);
-    return;
-  }
+  if (!db) {
+    if (callback) callback(false, { code: 'FIREBASE_NOT_INITIALIZED', message: 'Firebase SDK или подключение к базе не инициализировано.' });
+    return;
+  }
 
-  if (dbListenerRef) {
-    db.ref('kpi_project').off('value', dbListenerRef);
-    dbListenerRef = null;
-  }
-  _firebaseRefs.forEach(item => item.ref.off(item.event, item.fn));
-  _firebaseRefs = [];
+  if (dbListenerRef) {
+    db.ref('kpi_project').off('value', dbListenerRef);
+    dbListenerRef = null;
+  }
+  _firebaseRefs.forEach(item => item.ref.off(item.event, item.fn));
+  _firebaseRefs = [];
 
-  // Шаг 1: Быстрая однократная загрузка начального слепка
-  db.ref('kpi_project').once('value').then((snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      monthsData = data.monthsData || [];
-      inputState = data.inputState || {};
-      lastMonthsJson = JSON.stringify(monthsData);
-      lastUiHash = getUiHash(inputState);
-      saveLocalBackup();
-      updateFilterDropdowns();
-      renderAll();
-    } else if (monthsData.length === 0) {
-      addNewMonth();
-    }
+  // Отдельно различаем отказ Firebase в чтении и ошибки отрисовки приложения.
+  // Обработчик ОТКЛОНЕНИЯ Promise относится только к чтению /kpi_project.
+  db.ref('kpi_project').once('value').then((snapshot) => {
+    // Успешное чтение из БД: доступ подтверждён самим Firebase, а не списком в HTML.
+    if (callback) callback(true, null);
 
-    setSaveStatus('online');
-    if (callback) callback(true);
+    try {
+      const data = snapshot.val();
+      if (data) {
+        monthsData = data.monthsData || [];
+        inputState = data.inputState || {};
+        lastMonthsJson = JSON.stringify(monthsData);
+        lastUiHash = getUiHash(inputState);
+        saveLocalBackup();
+        updateFilterDropdowns();
+        renderAll();
+      } else if (monthsData.length === 0) {
+        addNewMonth();
+      }
 
-    // Шаг 2: Подписка отдельно на структуру месяцев
-    const monthsRef = db.ref('kpi_project/monthsData');
-    const onMonthsChange = (snap) => {
-      const newMonths = snap.val() || [];
-      const newJson = JSON.stringify(newMonths);
-      if (newJson !== lastMonthsJson) {
-        monthsData = newMonths;
-        lastMonthsJson = newJson;
-        saveLocalBackup();
-        updateFilterDropdowns();
-        renderAll();
-      }
-    };
-    monthsRef.on('value', onMonthsChange);
-    _firebaseRefs.push({ ref: monthsRef, event: 'value', fn: onMonthsChange });
+      setSaveStatus('online');
 
-    // Шаг 3: Точечные подписки на ячейки inputState (передают по 20 байт вместо всей БД)
-    const stateRef = db.ref('kpi_project/inputState');
-    const onChildChanged = (snap) => _applyRemoteCellChange(snap.key, snap.val());
-    const onChildAdded = (snap) => {
-      if (inputState[snap.key] !== snap.val()) {
-        _applyRemoteCellChange(snap.key, snap.val());
-      }
-    };
-    const onChildRemoved = (snap) => _applyRemoteCellChange(snap.key, null);
+      // Ошибка любой подписки логируется отдельно от отказа при первоначальном чтении.
+      const onSubscriptionError = (error) => {
+        console.error('Firebase realtime subscription failed:', error);
+        setSaveStatus('error');
+        showToast('Ошибка подписки Firebase: ' + (error.code || error.message || 'unknown'));
+      };
 
-    stateRef.on('child_changed', onChildChanged);
-    stateRef.on('child_added', onChildAdded);
-    stateRef.on('child_removed', onChildRemoved);
+      const monthsRef = db.ref('kpi_project/monthsData');
+      const onMonthsChange = (snap) => {
+        const newMonths = snap.val() || [];
+        const newJson = JSON.stringify(newMonths);
+        if (newJson !== lastMonthsJson) {
+          monthsData = newMonths;
+          lastMonthsJson = newJson;
+          saveLocalBackup();
+          updateFilterDropdowns();
+          renderAll();
+        }
+      };
+      monthsRef.on('value', onMonthsChange, onSubscriptionError);
+      _firebaseRefs.push({ ref: monthsRef, event: 'value', fn: onMonthsChange });
 
-    _firebaseRefs.push(
-      { ref: stateRef, event: 'child_changed', fn: onChildChanged },
-      { ref: stateRef, event: 'child_added', fn: onChildAdded },
-      { ref: stateRef, event: 'child_removed', fn: onChildRemoved }
-    );
-  }).catch((error) => {
-    console.warn("Firebase Access/Network Error:", error.code);
-    setSaveStatus('error');
-    if (callback) callback(false);
-  });
+      const stateRef = db.ref('kpi_project/inputState');
+      const onChildChanged = (snap) => _applyRemoteCellChange(snap.key, snap.val());
+      const onChildAdded = (snap) => {
+        if (inputState[snap.key] !== snap.val()) {
+          _applyRemoteCellChange(snap.key, snap.val());
+        }
+      };
+      const onChildRemoved = (snap) => _applyRemoteCellChange(snap.key, null);
+
+      stateRef.on('child_changed', onChildChanged, onSubscriptionError);
+      stateRef.on('child_added', onChildAdded, onSubscriptionError);
+      stateRef.on('child_removed', onChildRemoved, onSubscriptionError);
+      _firebaseRefs.push(
+        { ref: stateRef, event: 'child_changed', fn: onChildChanged },
+        { ref: stateRef, event: 'child_added', fn: onChildAdded },
+        { ref: stateRef, event: 'child_removed', fn: onChildRemoved }
+      );
+    } catch (error) {
+      // Не выдаём ошибку JavaScript за отсутствие email в белом списке.
+      console.error('Ошибка обработки данных после успешного чтения Firebase:', error);
+      setSaveStatus('error');
+      showToast('Доступ к Firebase есть, но произошла ошибка обработки данных. Откройте Console (F12).');
+    }
+  }, (error) => {
+    console.error('Firebase read /kpi_project FAILED:', error.code, error.message, error);
+    setSaveStatus('error');
+    if (callback) callback(false, error);
+  });
 };
    
 /* =============================================================
@@ -5971,19 +5986,27 @@ initFirebaseListener = function(callback) {
       overlay.style.opacity = '0';
       setTimeout(() => overlay.style.display = 'none', 250);
 
-      initFirebaseListener((accessGranted) => {
+      initFirebaseListener((accessGranted, firebaseError) => {
         if (!accessGranted) {
           overlay.style.display = 'flex';
           setTimeout(() => overlay.style.opacity = '1', 10);
 
-          if (title) title.innerText = "Доступ к облачной БД ограничен";
-          if (msg) msg.innerText = "Вашего email нет в белом списке Firebase. Вы можете сменить аккаунт или продолжить работу в автономном локальном режиме.";
+          const code = firebaseError && firebaseError.code ? String(firebaseError.code) : 'UNKNOWN_ERROR';
+          const detail = firebaseError && firebaseError.message ? String(firebaseError.message) : '';
+          const denied = /permission[_-]denied/i.test(code) || /permission denied/i.test(detail);
+
+          if (title) title.innerText = denied ? 'Firebase запретил чтение данных' : 'Не удалось загрузить облачные данные';
+          if (msg) {
+            msg.innerText = denied
+              ? 'Google-вход выполнен, но Firebase Realtime Database отклонила чтение /kpi_project. Ошибка: ' + code + '. Проверьте правила доступа именно к пути /kpi_project и проект esteem-acc18. Наличие email в списке само по себе не гарантирует доступ по текущим правилам.'
+              : 'Не удалось прочитать /kpi_project. Ошибка: ' + code + (detail ? ' (' + detail + ')' : '') + '. Это НЕ означает, что email отсутствует в белом списке. Откройте консоль разработчика для диагностики.';
+          }
 
           if (loginBtn) loginBtn.style.display = 'none';
           if (emailDisplay) emailDisplay.innerText = `Вы вошли как: ${user.email}`;
           if (wrongAccBtn) wrongAccBtn.style.display = 'inline-flex';
 
-          if (statusText) statusText.innerText = "Нет прав Cloud";
+          if (statusText) statusText.innerText = 'Firebase: ' + code;
         }
       });
     } else {
