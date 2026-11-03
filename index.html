@@ -1699,7 +1699,20 @@ textarea.modal-input {
     </div>
   </div>
 </div>
-
+<!-- MODAL 4: ADD TRAFFIC / ORGANIC CHANNEL -->
+<div id="simpleChannelBackdrop" class="modal-backdrop">
+  <div class="modal-content" style="max-width:420px;">
+    <h3 class="modal-title" id="simpleChannelModalTitle">Добавить канал</h3>
+    <div class="modal-field">
+      <label id="simpleChannelModalLabel">Название источника</label>
+      <input type="text" id="simpleChannelInput" class="modal-input" placeholder="Например: ВК Реклама, Avito, Telegram Ads" onkeydown="if(event.key==='Enter') confirmSimpleChannel()">
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn btn-cancel" onclick="closeSimpleChannelModal()">Отмена</button>
+      <button class="modal-btn btn-save" onclick="confirmSimpleChannel()">Добавить</button>
+    </div>
+  </div>
+</div>
 <!-- MODAL 5: DATA HUB (IMPORT / EXPORT / BACKUP) -->
 <div id="dataHubBackdrop" class="modal-backdrop">
   <div class="modal-content" style="max-width:560px;">
@@ -1798,6 +1811,8 @@ let activeSmmModalMonthIndex = -1;
 let activeAddMetricMonth = -1;
 let activeAddMetricChannel = -1;
 let activeNoteMonthIndex = -1;
+let activeSimpleChannelMonth = -1;
+let activeSimpleChannelType = ''; // 'traffic' | 'organic'
 
 let chartInstances = {};
 let currentChartType = 'line';
@@ -1811,6 +1826,25 @@ let compareSortAsc = true;
 let lastMonthsJson = "";
 let lastUiHash = "";
 let dbListenerRef = null;
+
+// Структуры кэширования и очередей Realtime-синхронизации
+const _inputElCache = new Map();
+const _slugLegacyCache = new Map();
+const _slugUniqueCache = new Map();
+const _smmMetricSlugCache = new Map();
+
+let _backupTimer = null;
+let _pendingLocalWrites = 0;
+let _lastLocalWriteTs = 0;
+const _dirtyInputKeys = new Set();
+const _firebaseInputTimers = {};
+const _rafRecalcQueue = new Set();
+let _rafRecalcId = null;
+
+let _activeTabId = 'traffic';
+const _dirtyTabs = new Set(['smm', 'organic', 'overview']);
+let _cachedMonthSummaries = [];
+let _firebaseRefs = [];
 
 const NF = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
 const NFP = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
@@ -1913,10 +1947,22 @@ function persistInputKey(key, val) {
     setSaveStatus('local');
     return;
   }
+
+  _dirtyInputKeys.add(key);
+  _pendingLocalWrites++;
+  _lastLocalWriteTs = Date.now();
   setSaveStatus('saving');
+
   const ref = db.ref('kpi_project/inputState/' + key);
   const op = (val === null || val === undefined) ? ref.remove() : ref.set(val);
-  op.then(() => setSaveStatus('saved')).catch(() => setSaveStatus('local'));
+  op.then(() => {
+    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
+    if (_pendingLocalWrites === 0) _dirtyInputKeys.clear();
+    setSaveStatus('saved');
+  }).catch(() => {
+    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
+    setSaveStatus('local');
+  });
 }
 
 function persistInputBatch(updates) {
@@ -1930,12 +1976,26 @@ function persistInputBatch(updates) {
 
 function saveStructure() {
   saveLocalBackup();
+  lastMonthsJson = JSON.stringify(monthsData);
   if (isLocalMode || !db) {
     setSaveStatus('local');
     return;
   }
   setSaveStatus('saving');
   db.ref('kpi_project/monthsData').set(monthsData)
+    .then(() => setSaveStatus('saved'))
+    .catch(() => setSaveStatus('local'));
+}
+
+function _saveMonthField(mI, field, value) {
+  saveLocalBackup();
+  lastMonthsJson = JSON.stringify(monthsData);
+  if (isLocalMode || !db) {
+    setSaveStatus('local');
+    return;
+  }
+  setSaveStatus('saving');
+  db.ref(`kpi_project/monthsData/${mI}/${field}`).set(value)
     .then(() => setSaveStatus('saved'))
     .catch(() => setSaveStatus('local'));
 }
@@ -1980,38 +2040,57 @@ function escapeHtml(text) {
 }
 
 function slugifyLegacy(text) {
-  return btoa(encodeURIComponent(text)).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+  let cached = _slugLegacyCache.get(text);
+  if (cached !== undefined) return cached;
+  cached = btoa(encodeURIComponent(text)).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+  _slugLegacyCache.set(text, cached);
+  return cached;
 }
 
 function slugifyUnique(text) {
+  let cached = _slugUniqueCache.get(text);
+  if (cached !== undefined) return cached;
   let hash = 0;
   const str = String(text || '');
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i);
     hash |= 0;
   }
-  return slugifyLegacy(str).substring(0, 6) + Math.abs(hash).toString(36).substring(0, 4);
+  cached = slugifyLegacy(str).substring(0, 6) + Math.abs(hash).toString(36).substring(0, 4);
+  _slugUniqueCache.set(text, cached);
+  return cached;
 }
 
-function slugify(text) {
-  return slugifyLegacy(text);
-}
-
-/**
- * Resolves SMM metric slug with 100% backwards compatibility for existing Firebase keys
- * while preventing collisions when two metrics starting with the same Cyrillic letter
- * (e.g. "Показы" and "Просмотры постов") coexist in the same channel.
- */
 function getSMMMetricSlug(mI, cI, metricName) {
-  const legacy = slugifyLegacy(metricName);
   const ch = monthsData[mI]?.smmChannels?.[cI];
-  if (!ch || !Array.isArray(ch.metrics)) return legacy;
+  if (!ch || !Array.isArray(ch.metrics)) return slugifyLegacy(metricName);
 
-  const sameLegacyMetrics = ch.metrics.filter(m => slugifyLegacy(m) === legacy);
-  if (sameLegacyMetrics.length <= 1 || sameLegacyMetrics[0] === metricName) {
-    return legacy;
+  const cacheKey = `${mI}_${cI}_${ch.metrics.length}_${metricName}`;
+  let cached = _smmMetricSlugCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const legacy = slugifyLegacy(metricName);
+  let countSame = 0;
+  let firstMatch = null;
+  for (let i = 0; i < ch.metrics.length; i++) {
+    if (slugifyLegacy(ch.metrics[i]) === legacy) {
+      if (countSame === 0) firstMatch = ch.metrics[i];
+      countSame++;
+      if (countSame > 1) break;
+    }
   }
-  return slugifyUnique(metricName);
+
+  cached = (countSame <= 1 || firstMatch === metricName) ? legacy : slugifyUnique(metricName);
+  _smmMetricSlugCache.set(cacheKey, cached);
+  return cached;
+}
+
+function _getFastInputEl(key) {
+  let el = _inputElCache.get(key);
+  if (el && el.isConnected) return el;
+  el = document.getElementById(key) || document.querySelector(`input[data-id="${key}"]`);
+  if (el) _inputElCache.set(key, el);
+  return el;
 }
 
 function parseNumberLike(val) {
@@ -2117,18 +2196,6 @@ function badge(id, plan, fact, invert = false) {
   el.innerText = p + '%';
 }
 
-function txtColor(id, fact, plan, invert = false, isMoney = false) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.innerHTML = isMoney ? fRub(fact) : fCount(fact);
-}
-
-function inputColor(id, fact, plan, invert = false) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.style.color = '';
-}
-
 function momBadge(cur, prev, invert = false) {
   if (prev === undefined || prev === null || prev === 0 || cur === undefined || cur === null) return '';
   const delta = ((cur - prev) / Math.abs(prev)) * 100;
@@ -2147,14 +2214,6 @@ function toggleTheme() {
   isDark = !isDark;
   saveUserPrefs();
   applyUserPrefsToDOM();
-
-  const btn = document.getElementById('themeToggleBtn');
-  if (btn) {
-    btn.innerHTML = isDark
-      ? `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`
-      : `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
-  }
-
   if (document.getElementById('overview').classList.contains('active')) renderOverview();
 }
 
@@ -2294,20 +2353,36 @@ function updateChannelFilterDropdown() {
   chSelect.innerHTML = html;
 }
    
-function updateYearFilterDropdown() {
-  updateFilterDropdowns();
+function _applyFastMonthVisibility() {
+  ['tr', 'smm', 'org'].forEach(prefix => {
+    monthsData.forEach((m, i) => {
+      if (!m || m._deleted) return;
+      const block = document.getElementById(`${prefix}_block_${i}`);
+      if (!block) return;
+      const year = m.name.match(/\d{4}/)?.[0] || '';
+      const matchY = (currentFilterYear === 'All' || currentFilterYear === year);
+      const matchM = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
+      block.style.display = (matchY && matchM) ? 'block' : 'none';
+    });
+  });
+  if (_activeTabId === 'overview') renderOverview();
 }
 
 function changeFilterYear(year) {
   currentFilterYear = year;
   currentFilterMonth = 'All';
+  saveUserPrefs();
   updateFilterDropdowns();
-  renderAll();
+  _applyFastMonthVisibility();
+  applyChannelSearchFilter();
 }
 
 function changeFilterMonth(mIdx) {
   currentFilterMonth = mIdx;
-  renderAll();
+  saveUserPrefs();
+  updateChannelFilterDropdown();
+  _applyFastMonthVisibility();
+  applyChannelSearchFilter();
 }
 
 function changeOverviewFocusMonth(val) {
@@ -2560,40 +2635,49 @@ function _smartRenderList(containerId, itemsData, prefix, htmlGenerator) {
       continue;
     }
 
-    const newHTML = htmlGenerator(itemsData[i], i);
+    const yearMatch = itemsData[i].name.match(/\d{4}/);
+    const year = yearMatch ? yearMatch[0] : '';
+    const matchYear = (currentFilterYear === 'All' || currentFilterYear === year);
+    const matchMonth = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
+    const isVisible = matchYear && matchMonth;
+
     let block = document.getElementById(blockId);
+
+    if (!isVisible && block) {
+      block.style.display = 'none';
+      continue;
+    }
+
+    const newHTML = htmlGenerator(itemsData[i], i);
 
     if (!block) {
       block = document.createElement('div');
       block.className = 'bento-card';
       block.id = blockId;
       block.innerHTML = newHTML;
+      block._lastRawHtml = newHTML;
       container.appendChild(block);
-    } else {
-      if (block.innerHTML !== newHTML) {
-        const active = document.activeElement;
-        const activeId = active ? active.id : null;
-        const activeDataId = active ? active.getAttribute('data-id') : null;
-        const selStart = active ? active.selectionStart : 0;
+    } else if (block._lastRawHtml !== newHTML) {
+      const active = document.activeElement;
+      const activeId = active ? active.id : null;
+      const activeDataId = active ? active.getAttribute('data-id') : null;
+      const selStart = active ? active.selectionStart : 0;
 
-        block.innerHTML = newHTML;
+      block.innerHTML = newHTML;
+      block._lastRawHtml = newHTML;
+      _inputElCache.clear();
 
-        let newActive = activeId ? document.getElementById(activeId) : null;
-        if (!newActive && activeDataId) {
-          newActive = block.querySelector(`input[data-id="${activeDataId}"]`);
-        }
-        if (newActive) {
-          newActive.focus();
-          try { newActive.setSelectionRange(selStart, selStart); } catch (e) {}
-        }
+      let newActive = activeId ? document.getElementById(activeId) : null;
+      if (!newActive && activeDataId) {
+        newActive = block.querySelector(`input[data-id="${activeDataId}"]`);
+      }
+      if (newActive) {
+        newActive.focus();
+        try { newActive.setSelectionRange(selStart, selStart); } catch (e) {}
       }
     }
 
-    const yearMatch = itemsData[i].name.match(/\d{4}/);
-    const year = yearMatch ? yearMatch[0] : '';
-    const matchYear = (currentFilterYear === 'All' || currentFilterYear === year);
-    const matchMonth = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
-    block.style.display = (matchYear && matchMonth) ? 'block' : 'none';
+    block.style.display = isVisible ? 'block' : 'none';
   }
 
   const children = Array.from(container.children);
@@ -2639,8 +2723,12 @@ function toggleWeek(mI, cI, wI, type = 'traffic') {
   inputState[key] = next;
   persistInputKey(key, next);
 
-  if (type === 'smm') renderSMM();
-  else renderTraffic();
+  const attr = type === 'smm' ? 'data-smm-week-group' : 'data-week-group';
+  const rows = document.querySelectorAll(`tr[${attr}="m${mI}_c${cI}_w${wI}"]`);
+  rows.forEach(r => r.classList.toggle('week-collapsed', next));
+
+  const btn = document.querySelector(`button[onclick="toggleWeek(${mI},${cI},${wI}${type === 'smm' ? ",'smm'" : ''})"]`);
+  if (btn) btn.innerText = next ? '▸' : '▾';
 }
 
 function toggleDays(uniqueId) {
@@ -2649,28 +2737,30 @@ function toggleDays(uniqueId) {
   inputState[stateKey] = next;
   persistInputKey(stateKey, next);
 
-  if (uniqueId.startsWith('smm_')) renderSMM();
-  else if (uniqueId.startsWith('org_')) renderOrganic();
-  else renderTraffic();
+  const dayRows = document.querySelectorAll(`.day-row-${uniqueId}`);
+  if (dayRows.length > 0) {
+    dayRows.forEach(r => r.classList.toggle('active', next));
+    const btn = document.querySelector(`button[onclick="toggleDays('${uniqueId}')"]`);
+    if (btn) btn.classList.toggle('active', next);
+  } else {
+    if (uniqueId.startsWith('smm_')) renderSMM();
+    else if (uniqueId.startsWith('org_')) renderOrganic();
+    else renderTraffic();
+  }
 }
 
 function toggleMonth(i, el) {
+  if (!monthsData[i]) return;
   monthsData[i].collapsed = !monthsData[i].collapsed;
-  saveStructure();
+  _saveMonthField(i, 'collapsed', monthsData[i].collapsed);
 
   if (el) {
     const card = el.closest('.bento-card');
     const wrapper = card ? card.querySelector('.month-body-wrapper') : null;
     const icon = el.querySelector('.month-arrow');
-
     if (wrapper) {
-      if (monthsData[i].collapsed) {
-        wrapper.classList.add('collapsed');
-        if (icon) icon.innerText = '▼';
-      } else {
-        wrapper.classList.remove('collapsed');
-        if (icon) icon.innerText = '▲';
-      }
+      wrapper.classList.toggle('collapsed', monthsData[i].collapsed);
+      if (icon) icon.innerText = monthsData[i].collapsed ? '▼' : '▲';
     }
   }
 }
@@ -2886,31 +2976,77 @@ function closeNoteModal() {
 
 function saveNote() {
   if (activeNoteMonthIndex < 0 || !monthsData[activeNoteMonthIndex]) return;
-  monthsData[activeNoteMonthIndex].notes = document.getElementById('noteText').value.trim();
-  saveStructure();
+  const mI = activeNoteMonthIndex;
+  monthsData[mI].notes = document.getElementById('noteText').value.trim();
+  _saveMonthField(mI, 'notes', monthsData[mI].notes);
   closeNoteModal();
   renderAll();
   showToast("Заметка сохранена");
 }
 
 function renderAll() {
-  renderTraffic();
-  renderSMM();
-  renderOrganic();
-  renderOverview();
+  _inputElCache.clear();
+  _smmMetricSlugCache.clear();
+  ['traffic', 'smm', 'organic', 'overview'].forEach(t => _dirtyTabs.add(t));
+  _renderSingleTab(_activeTabId);
 }
 
 /* =============================================================
    9. TRAFFIC MODULE (RENDER & NON-DESTRUCTIVE CALCULATIONS)
 ============================================================= */
-function addTrafficChannel(mI) {
-  const n = prompt("Введите название рекламного канала (Traffic):");
-  if (n && n.trim()) {
-    monthsData[mI].channels.push(n.trim());
+function openSimpleChannelModal(mI, type) {
+  activeSimpleChannelMonth = mI;
+  activeSimpleChannelType = type;
+  const titleEl = document.getElementById('simpleChannelModalTitle');
+  const labelEl = document.getElementById('simpleChannelModalLabel');
+  const inputEl = document.getElementById('simpleChannelInput');
+
+  if (titleEl) titleEl.innerText = type === 'organic' ? 'Добавить источник Organic' : 'Добавить рекламный канал Traffic';
+  if (labelEl) labelEl.innerText = type === 'organic' ? 'Название органического источника' : 'Название рекламного канала';
+  if (inputEl) {
+    inputEl.value = '';
+    inputEl.placeholder = type === 'organic' ? 'Например: Поиск, Блог, Карты' : 'Например: Яндекс Директ, ВК Реклама, Avito';
+  }
+  document.getElementById('simpleChannelBackdrop').classList.add('active');
+  setTimeout(() => { if (inputEl) inputEl.focus(); }, 50);
+}
+
+function closeSimpleChannelModal() {
+  document.getElementById('simpleChannelBackdrop').classList.remove('active');
+  activeSimpleChannelMonth = -1;
+  activeSimpleChannelType = '';
+}
+
+function confirmSimpleChannel() {
+  const inputEl = document.getElementById('simpleChannelInput');
+  const name = (inputEl ? inputEl.value : '').trim();
+  if (!name) return;
+
+  const mI = activeSimpleChannelMonth;
+  const type = activeSimpleChannelType;
+  if (mI < 0 || !monthsData[mI]) return;
+
+  if (type === 'organic') {
+    if (!monthsData[mI].organicChannels) monthsData[mI].organicChannels = [];
+    monthsData[mI].organicChannels.push(name);
+    updateFilterDropdowns();
+    renderOrganic();
+    renderOverview();
+    saveStructure();
+    showToast(`Добавлен источник Organic: ${name}`);
+  } else {
+    if (!monthsData[mI].channels) monthsData[mI].channels = [];
+    monthsData[mI].channels.push(name);
     updateFilterDropdowns();
     renderAll();
     saveStructure();
+    showToast(`Добавлен канал Traffic: ${name}`);
   }
+  closeSimpleChannelModal();
+}
+
+function addTrafficChannel(mI) {
+  openSimpleChannelModal(mI, 'traffic');
 }
 
 function deleteTrafficChannel(mI, cI) {
@@ -2926,8 +3062,10 @@ function deleteTrafficChannel(mI, cI) {
 function updateWeekName(m, w, txtVal) {
   const clean = (txtVal || '').trim();
   if (monthsData[m] && monthsData[m].weeks && monthsData[m].weeks[w]) {
-    monthsData[m].weeks[w].title = clean || `${w + 1} нед.`;
-    saveStructure();
+    const nextTitle = clean || `${w + 1} нед.`;
+    if (monthsData[m].weeks[w].title === nextTitle) return;
+    monthsData[m].weeks[w].title = nextTitle;
+    _saveMonthField(m, `weeks/${w}/title`, nextTitle);
   }
 }
 
@@ -3452,8 +3590,7 @@ function calcRow(id) {
   const fRev = inputState[`${id}_fact_revenue`] || 0;
 
   txt(`${id}_plan_cpl`, fRub(cplValue(ps, pl)));
-  txtColor(`${id}_fact_cpl`, cplValue(fs, fl), cplValue(ps, pl), true, true);
-  inputColor(`${id}_fl`, fl, pl, false);
+  txt(`${id}_fact_cpl`, fRub(cplValue(fs, fl)));
 
   const elRowDrr = document.getElementById(`${id}_fact_drr`);
   if (elRowDrr) {
@@ -3490,9 +3627,10 @@ function calcWeekTotal(m, w) {
   txt(`${m}_${w}_total_plan_spend`, fRub(s.ps));
   txt(`${m}_${w}_total_plan_leads`, fCount(s.pl));
   txt(`${m}_${w}_total_fact_spend`, fRub(s.fs));
-  txtColor(`${m}_${w}_total_fact_leads`, s.fl, s.pl, false, false);
   txt(`${m}_${w}_total_plan_cpl`, fRub(cplValue(s.ps, s.pl)));
-  txtColor(`${m}_${w}_total_fact_cpl`, cplValue(s.fs, s.fl), cplValue(s.ps, s.pl), true, true);
+  txt(`${m}_${w}_total_fact_leads`, fCount(s.fl));
+txt(`${m}_${w}_total_plan_cpl`, fRub(cplValue(s.ps, s.pl)));
+txt(`${m}_${w}_total_fact_cpl`, fRub(cplValue(s.fs, s.fl)));
 
   badge(`${m}_${w}_total_perc_spend`, s.ps, s.fs, true);
   badge(`${m}_${w}_total_perc_leads`, s.pl, s.fl);
@@ -3530,14 +3668,14 @@ function calcChannelGrand(mI, cI) {
 
   txt(`m${mI}_c${cI}_mini_fs`, fRub(fs));
   txt(`m${mI}_c${cI}_mini_ps`, "/ " + fRub(ps));
-  txtColor(`m${mI}_c${cI}_mini_fl`, fl, pl, false, false);
   txt(`m${mI}_c${cI}_mini_pl`, "/ " + fCount(pl));
+txt(`m${mI}_c${cI}_mini_fl`, fCount(fl));
+txt(`m${mI}_c${cI}_mini_pl`, "/ " + fCount(pl));
 
-  const pcpl = cplValue(ps, pl);
-  const fcpl = cplValue(fs, fl);
+const pcpl = cplValue(ps, pl);
+const fcpl = cplValue(fs, fl);
 
-  txtColor(`m${mI}_c${cI}_mini_fcpl`, fcpl, pcpl, true, true);
-  txt(`m${mI}_c${cI}_mini_pcpl`, "/ " + fRub(pcpl));
+txt(`m${mI}_c${cI}_mini_fcpl`, fRub(fcpl));
 
   let drrVal = 0;
   let drrClass = '';
@@ -3618,8 +3756,8 @@ function calcGrand(m) {
   txt(`${m}_stat_ps`, fRub(s.ps));
   txt(`${m}_stat_fs`, fRub(s.fs));
   txt(`${m}_stat_pl`, fCount(s.pl));
-  txtColor(`${m}_stat_fl`, s.fl, s.pl, false, false);
-  txtColor(`${m}_stat_fcpl`, cplValue(s.fs, s.fl), cplValue(s.ps, s.pl), true, true);
+  txt(`${m}_stat_fl`, fCount(s.fl));
+txt(`${m}_stat_fcpl`, fRub(cplValue(s.fs, s.fl)));
   txt(`${m}_stat_pcpl`, fRub(cplValue(s.ps, s.pl)));
 
   const timeProgress = getMonthTimeProgress(monthsData[mI].name);
@@ -3846,13 +3984,6 @@ function deleteSmmMetricByIdx(mI, cI, mIdx) {
     renderOverview();
     saveStructure();
   }
-}
-
-function deleteSmmMetric(mI, cI, metricName) {
-  const ch = monthsData[mI]?.smmChannels?.[cI];
-  if (!ch || !ch.metrics) return;
-  const idx = ch.metrics.indexOf(metricName);
-  if (idx > -1) deleteSmmMetricByIdx(mI, cI, idx);
 }
 
 function openAddMetricModal(mI, cI) {
@@ -4380,7 +4511,7 @@ function calcSMMDaysToWeek(mI, cI, wI) {
     }
 
     const factKey = getSMMKey(mI, cI, wI, metricName, 'fact');
-    const el = document.querySelector(`input[data-id="${factKey}"]`);
+    const el = _getFastInputEl(factKey);
 
     if (finalVal !== null) {
       inputState[factKey] = finalVal;
@@ -4659,14 +4790,7 @@ function toggleOrgFinanceMode(mI, cI) {
 }
 
 function addOrganicChannel(mI) {
-  const n = prompt("Название органического источника:");
-  if (n && n.trim()) {
-    monthsData[mI].organicChannels.push(n.trim());
-    updateFilterDropdowns();
-    renderOrganic();
-    renderOverview();
-    saveStructure();
-  }
+  openSimpleChannelModal(mI, 'organic');
 }
 
 function deleteOrganicChannel(mI, cI) {
@@ -4924,7 +5048,7 @@ function calcOrgDaysToWeek(mI, wI, cI) {
     }
   });
 
-  const wInpV = document.querySelector(`input[data-id="${rowId}_c${cI}_fact_visits"]`);
+  const wInpV = _getFastInputEl(`${rowId}_c${cI}_fact_visits`);
   if (hasDayV) {
     inputState[`${rowId}_c${cI}_fact_visits`] = sumV;
     if (wInpV && document.activeElement !== wInpV) {
@@ -4935,7 +5059,7 @@ function calcOrgDaysToWeek(mI, wI, cI) {
     wInpV.classList.remove('cell-auto-sum');
   }
 
-  const wInpL = document.querySelector(`input[data-id="${rowId}_c${cI}_fact_leads"]`);
+  const wInpL = _getFastInputEl(`${rowId}_c${cI}_fact_leads`);
   if (hasDayL) {
     inputState[`${rowId}_c${cI}_fact_leads`] = sumL;
     if (wInpL && document.activeElement !== wInpL) {
@@ -4946,7 +5070,7 @@ function calcOrgDaysToWeek(mI, wI, cI) {
     wInpL.classList.remove('cell-auto-sum');
   }
 
-  const wInpRev = document.querySelector(`input[data-id="${rowId}_c${cI}_fact_revenue"]`);
+  const wInpRev = _getFastInputEl(`${rowId}_c${cI}_fact_revenue`);
   if (hasDayRev) {
     inputState[`${rowId}_c${cI}_fact_revenue`] = sumRev;
     if (wInpRev && document.activeElement !== wInpRev) {
@@ -5125,34 +5249,56 @@ function applyDzenMagic(el, val, rawString = '') {
   return val;
 }
 
+function _scheduleRecalcForId(id) {
+  _rafRecalcQueue.add(id);
+  _dirtyTabs.add('overview');
+  if (_rafRecalcId) return;
+  _rafRecalcId = requestAnimationFrame(() => {
+    _rafRecalcId = null;
+    const ids = Array.from(_rafRecalcQueue);
+    _rafRecalcQueue.clear();
+    ids.forEach(itemId => {
+      if (itemId.startsWith('smm_')) recalcSMM(itemId);
+      else if (itemId.startsWith('org_')) recalcOrganic(itemId);
+      else recalc(itemId);
+    });
+  });
+}
+
 function onCellBlur(el) {
-  const rawValue = el.value.trim();
   const id = el.dataset.id;
+  if (!id) return;
   const kind = el.dataset.kind || 'count';
+  const rawValue = el.value.trim();
+  const wasEdited = el.dataset.edited === "true";
+  el.dataset.edited = "false";
+
+  if (!wasEdited) {
+    const existing = inputState[id];
+    if (existing === undefined || existing === null || existing === '') el.value = '';
+    else if (kind === 'money') el.value = formatMoney(existing);
+    else if (kind === 'percent') el.value = formatPercent(existing);
+    else el.value = formatCount(existing);
+    return;
+  }
+
+  if (_firebaseInputTimers[id]) {
+    clearTimeout(_firebaseInputTimers[id]);
+    delete _firebaseInputTimers[id];
+  }
 
   if (rawValue === '') {
     el.value = '';
     delete inputState[id];
     persistInputKey(id, null);
-
-    if (id.startsWith('smm_')) recalcSMM(id);
-    else if (id.startsWith('org_')) recalcOrganic(id);
-    else recalc(id);
-
-    el.dataset.edited = "false";
+    _scheduleRecalcForId(id);
     return;
   }
 
-  let n;
+  let n = (kind === 'percent')
+    ? applyDzenMagic(el, parsePercentLike(rawValue), rawValue)
+    : parseNumberLike(rawValue);
 
-  if (kind === 'percent') {
-    n = parsePercentLike(rawValue);
-    if (el.dataset.edited === "true") n = applyDzenMagic(el, n, rawValue);
-  } else {
-    n = parseNumberLike(rawValue);
-  }
-
-  el.dataset.edited = "false";
   inputState[id] = n;
   persistInputKey(id, n);
 
@@ -5160,49 +5306,42 @@ function onCellBlur(el) {
   else if (kind === 'percent') el.value = formatPercent(n);
   else el.value = formatCount(n);
 
-  if (id.startsWith('smm_')) recalcSMM(id);
-  else if (id.startsWith('org_')) recalcOrganic(id);
-  else recalc(id);
+  _scheduleRecalcForId(id);
 }
 
 function setupEventListeners() {
-  const firebaseTimeouts = {};
-
   const handleInput = (e) => {
-    if (e.target.classList.contains('cell-input')) {
-      const el = e.target;
-      const id = el.dataset.id;
-      if (!id) return;
-      const kind = el.dataset.kind || 'count';
+    const el = e.target;
+    if (!el || !el.classList.contains('cell-input')) return;
+    const id = el.dataset.id;
+    if (!id) return;
 
-      el.dataset.edited = "true";
+    const kind = el.dataset.kind || 'count';
+    el.dataset.edited = "true";
+    _dirtyInputKeys.add(id);
 
-      const raw = el.value.trim();
-      if (raw === '') {
-        delete inputState[id];
-      } else {
-        let val = (kind === 'percent') ? parsePercentLike(raw) : parseNumberLike(raw);
-        inputState[id] = val;
-      }
-
-      if (id.startsWith('smm_')) recalcSMM(id);
-      else if (id.startsWith('org_')) recalcOrganic(id);
-      else recalc(id);
-
-      if (firebaseTimeouts[id]) clearTimeout(firebaseTimeouts[id]);
-
-      firebaseTimeouts[id] = setTimeout(() => {
-        persistInputKey(id, inputState[id] ?? null);
-      }, 450);
+    const raw = el.value.trim();
+    if (raw === '') {
+      delete inputState[id];
+    } else {
+      inputState[id] = (kind === 'percent') ? parsePercentLike(raw) : parseNumberLike(raw);
     }
+
+    _scheduleRecalcForId(id);
+
+    if (_firebaseInputTimers[id]) clearTimeout(_firebaseInputTimers[id]);
+    _firebaseInputTimers[id] = setTimeout(() => {
+      delete _firebaseInputTimers[id];
+      persistInputKey(id, inputState[id] ?? null);
+    }, 650);
   };
 
   const handleFocus = (e) => {
-    if (e.target.classList.contains('cell-input')) onCellFocus(e.target);
+    if (e.target && e.target.classList.contains('cell-input')) onCellFocus(e.target);
   };
 
   const handleBlur = (e) => {
-    if (e.target.classList.contains('cell-input')) onCellBlur(e.target);
+    if (e.target && e.target.classList.contains('cell-input')) onCellBlur(e.target);
   };
 
   ['trafficContainer', 'smmContainer', 'organicContainer'].forEach(containerId => {
@@ -5498,10 +5637,11 @@ function sortCompareTableBy(col) {
     compareSortCol = col;
     compareSortAsc = false;
   }
-  renderOverview();
+  renderCompareTable(_cachedMonthSummaries);
 }
 
 function renderCompareTable(monthSummaries) {
+   _cachedMonthSummaries = monthSummaries || [];
   const el = document.getElementById('compareTable');
   if (!el) return;
 
@@ -5624,98 +5764,100 @@ function initCharts(labels, sF, sP, lF, lP, cF, cP, slF, slP, srF, srP, ssF, ssP
   createLineChart('chartSMMReach', labels, 'Охват Факт', srF, slateFact, 'Охват План', srP);
 }
 
-function createLineChart(canvasId, labels, label1, data1, color1, label2, data2) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
+createLineChart = function(canvasId, labels, label1, data1, color1, label2, data2) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || typeof Chart === 'undefined') return;
 
-  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const colors = getChartColors();
+  const isBar = currentChartType === 'bar';
+  const targetType = isBar ? 'bar' : 'line';
+  const existing = chartInstances[canvasId];
 
-  const colors = getChartColors();
-  const isBar = currentChartType === 'bar';
+  // Если график уже создан и тип не изменился — обновляем данные на месте без пересоздания Canvas
+  if (existing && existing.config.type === targetType) {
+    existing.data.labels = labels;
+    existing.data.datasets[0].label = label1;
+    existing.data.datasets[0].data = data1;
+    existing.data.datasets[0].borderColor = color1;
+    existing.data.datasets[0].backgroundColor = isBar ? color1 + 'cc' : color1;
 
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: isBar ? 'bar' : 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: label1,
-          data: data1,
-          borderColor: color1,
-          backgroundColor: isBar ? color1 + 'cc' : color1,
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          tension: 0.3,
-          pointRadius: isBar ? 0 : 3.5
-        },
-        {
-          label: label2,
-          data: data2,
-          borderColor: isBar ? '#64748b' : color1,
-          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          borderDash: isBar ? [] : [6, 4],
-          tension: 0.3,
-          pointRadius: 0,
-          pointHoverRadius: 0
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: {
-            color: colors.text,
-            font: { family: 'Inter', weight: '600', size: 11 }
-          }
-        },
-        tooltip: {
-          mode: 'index',
-          intersect: false
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
-        },
-        y: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
-          beginAtZero: true
-        }
-      }
-    }
-  });
-}
+    existing.data.datasets[1].label = label2;
+    existing.data.datasets[1].data = data2;
+    existing.data.datasets[1].borderColor = isBar ? '#64748b' : color1;
+    existing.data.datasets[1].backgroundColor = isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent';
+
+    existing.options.plugins.legend.labels.color = colors.text;
+    existing.options.scales.x.grid.color = colors.grid;
+    existing.options.scales.x.ticks.color = colors.text;
+    existing.options.scales.y.grid.color = colors.grid;
+    existing.options.scales.y.ticks.color = colors.text;
+
+    existing.update('none');
+    return;
+  }
+
+  if (existing) existing.destroy();
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: targetType,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: label1,
+          data: data1,
+          borderColor: color1,
+          backgroundColor: isBar ? color1 + 'cc' : color1,
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          tension: 0.3,
+          pointRadius: isBar ? 0 : 3.5
+        },
+        {
+          label: label2,
+          data: data2,
+          borderColor: isBar ? '#64748b' : color1,
+          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
+          borderWidth: 2,
+          borderRadius: isBar ? 6 : 0,
+          borderDash: isBar ? [] : [6, 4],
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: colors.text,
+            font: { family: 'Inter', weight: '600', size: 11 }
+          }
+        },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
+        },
+        y: {
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+};
 
 /* =============================================================
    14. REAL-TIME FIREBASE SYNC & HOTKEYS (RU/EN LAYOUT SAFE)
 ============================================================= */
-function softUpdateUI() {
-  Object.keys(inputState).forEach(key => {
-    let el = document.getElementById(key);
-    if (!el) el = document.querySelector(`input[data-id="${key}"]`);
-
-    if (el && document.activeElement !== el) {
-      const kind = el.dataset.kind || 'count';
-      const val = inputState[key];
-
-      if (kind === 'money') el.value = formatMoney(val);
-      else if (kind === 'percent') el.value = formatPercent(val);
-      else el.value = formatCount(val);
-    }
-  });
-
-  recalcAll();
-  recalcAllSMM();
-  recalcAllOrganic();
-  renderOverview();
-}
-
 function getUiHash(state) {
   return Object.keys(state)
     .filter(k => k.startsWith('ui_'))
@@ -5724,860 +5866,77 @@ function getUiHash(state) {
     .join('|');
 }
 
-function initFirebaseListener(callback) {
-  if (!db) {
-    if (callback) callback(false);
-    return;
-  }
-  if (dbListenerRef) db.ref('kpi_project').off('value', dbListenerRef);
-
-  dbListenerRef = db.ref('kpi_project').on('value', (snapshot) => {
-    const data = snapshot.val();
-
-    if (data) {
-      const newMonthsData = data.monthsData || [];
-      inputState = data.inputState || {};
-
-      const newJson = JSON.stringify(newMonthsData);
-      const newUiHash = getUiHash(inputState);
-
-      const isStructureChanged = newJson !== lastMonthsJson;
-      const isUiChanged = newUiHash !== lastUiHash;
-
-      monthsData = newMonthsData;
-      lastMonthsJson = newJson;
-      lastUiHash = newUiHash;
-
-      saveLocalBackup();
-      updateFilterDropdowns();
-
-      if (isStructureChanged || isUiChanged) renderAll();
-      else softUpdateUI();
-    } else {
-      if (monthsData.length === 0) addNewMonth();
-    }
-
-    setSaveStatus('online');
-    if (callback) callback(true);
-  }, (error) => {
-    console.warn("Firebase Access/Network Error:", error.code);
-    setSaveStatus('error');
-    if (callback) callback(false);
-  });
-}
-
-
-/* =============================================================
-   ENTERPRISE PERFORMANCE & REALTIME PATCH v2.0 (ALL-IN-ONE)
-   Вставить прямо перед секцией 15. APPLICATION BOOTSTRAP
-============================================================= */
-
-// --- A. КЭШИРОВАНИЕ И СЛУЖЕБНЫЕ СТРУКТУРЫ ПАМЯТИ ---
-const _inputElCache = new Map();
-const _slugLegacyCache = new Map();
-const _slugUniqueCache = new Map();
-const _smmMetricSlugCache = new Map();
-
-let _backupTimer = null;
-let _pendingLocalWrites = 0;
-let _lastLocalWriteTs = 0;
-const _dirtyInputKeys = new Set();
-const _firebaseInputTimers = {};
-const _rafRecalcQueue = new Set();
-let _rafRecalcId = null;
-
-let _activeTabId = 'traffic';
-const _dirtyTabs = new Set(['smm', 'organic', 'overview']);
-let _cachedMonthSummaries = [];
-let _firebaseRefs = [];
-
-// 1. Мемоизация тяжелых строковых функций (CPU Optimization)
-slugifyLegacy = function(text) {
-  let cached = _slugLegacyCache.get(text);
-  if (cached !== undefined) return cached;
-  cached = btoa(encodeURIComponent(text)).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-  _slugLegacyCache.set(text, cached);
-  return cached;
-};
-
-slugifyUnique = function(text) {
-  let cached = _slugUniqueCache.get(text);
-  if (cached !== undefined) return cached;
-  let hash = 0;
-  const str = String(text || '');
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  cached = slugifyLegacy(str).substring(0, 6) + Math.abs(hash).toString(36).substring(0, 4);
-  _slugUniqueCache.set(text, cached);
-  return cached;
-};
-
-getSMMMetricSlug = function(mI, cI, metricName) {
-  const ch = monthsData[mI]?.smmChannels?.[cI];
-  if (!ch || !Array.isArray(ch.metrics)) return slugifyLegacy(metricName);
-
-  const cacheKey = `${mI}_${cI}_${ch.metrics.length}_${metricName}`;
-  let cached = _smmMetricSlugCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-
-  const legacy = slugifyLegacy(metricName);
-  let countSame = 0;
-  let firstMatch = null;
-  for (let i = 0; i < ch.metrics.length; i++) {
-    if (slugifyLegacy(ch.metrics[i]) === legacy) {
-      if (countSame === 0) firstMatch = ch.metrics[i];
-      countSame++;
-      if (countSame > 1) break;
-    }
-  }
-
-  cached = (countSame <= 1 || firstMatch === metricName) ? legacy : slugifyUnique(metricName);
-  _smmMetricSlugCache.set(cacheKey, cached);
-  return cached;
-};
-
-// 2. O(1) поиск инпутов в DOM вместо document.querySelector
-function _getFastInputEl(key) {
-  let el = _inputElCache.get(key);
-  if (el && el.isConnected) return el;
-  el = document.getElementById(key) || document.querySelector(`input[data-id="${key}"]`);
-  if (el) _inputElCache.set(key, el);
-  return el;
-}
-
-// 3. Неблокирующий бекап в localStorage
-function _saveLocalBackupNow() {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      monthsData,
-      inputState
-    }));
-  } catch (e) {
-    console.warn("Local backup storage warning:", e);
-  }
-}
-
-saveLocalBackup = function() {
-  if (_backupTimer) clearTimeout(_backupTimer);
-  _backupTimer = setTimeout(_saveLocalBackupNow, 1500);
-};
-
-window.addEventListener('beforeunload', () => {
-  if (_backupTimer) _saveLocalBackupNow();
-});
-
-// --- B. ТОЧЕЧНАЯ РАБОТА С FIREBASE БД (БЕЗ ПЕРЕЗАПИСИ ВСЕГО ДЕРЕВА) ---
-persistInputKey = function(key, val) {
-  saveLocalBackup();
-  if (isLocalMode || !db) {
-    setSaveStatus('local');
-    return;
-  }
-
-  _dirtyInputKeys.add(key);
-  _pendingLocalWrites++;
-  _lastLocalWriteTs = Date.now();
-  setSaveStatus('saving');
-
-  const ref = db.ref('kpi_project/inputState/' + key);
-  const op = (val === null || val === undefined) ? ref.remove() : ref.set(val);
-  op.then(() => {
-    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
-    if (_pendingLocalWrites === 0) _dirtyInputKeys.clear();
-    setSaveStatus('saved');
-  }).catch(() => {
-    _pendingLocalWrites = Math.max(0, _pendingLocalWrites - 1);
-    setSaveStatus('local');
-  });
-};
-
-// Точечное сохранение поля месяца в Firebase вместо отправки всего массива monthsData
-function _saveMonthField(mI, field, value) {
-  saveLocalBackup();
-  lastMonthsJson = JSON.stringify(monthsData);
-  if (isLocalMode || !db) {
-    setSaveStatus('local');
-    return;
-  }
-  setSaveStatus('saving');
-  db.ref(`kpi_project/monthsData/${mI}/${field}`).set(value)
-    .then(() => setSaveStatus('saved'))
-    .catch(() => setSaveStatus('local'));
-}
-
-toggleMonth = function(i, el) {
-  if (!monthsData[i]) return;
-  monthsData[i].collapsed = !monthsData[i].collapsed;
-  _saveMonthField(i, 'collapsed', monthsData[i].collapsed);
-
-  if (el) {
-    const card = el.closest('.bento-card');
-    const wrapper = card ? card.querySelector('.month-body-wrapper') : null;
-    const icon = el.querySelector('.month-arrow');
-    if (wrapper) {
-      wrapper.classList.toggle('collapsed', monthsData[i].collapsed);
-      if (icon) icon.innerText = monthsData[i].collapsed ? '▼' : '▲';
-    }
-  }
-};
-
-updateWeekName = function(m, w, txtVal) {
-  const clean = (txtVal || '').trim();
-  if (monthsData[m] && monthsData[m].weeks && monthsData[m].weeks[w]) {
-    const nextTitle = clean || `${w + 1} нед.`;
-    if (monthsData[m].weeks[w].title === nextTitle) return;
-    monthsData[m].weeks[w].title = nextTitle;
-    _saveMonthField(m, `weeks/${w}/title`, nextTitle);
-  }
-};
-
-saveNote = function() {
-  if (activeNoteMonthIndex < 0 || !monthsData[activeNoteMonthIndex]) return;
-  const mI = activeNoteMonthIndex;
-  monthsData[mI].notes = document.getElementById('noteText').value.trim();
-  _saveMonthField(mI, 'notes', monthsData[mI].notes);
-  closeNoteModal();
-  renderAll();
-  showToast("Заметка сохранена");
-};
-
-// --- C. УМНЫЙ ДОМ-ДИФФИНГ, ЛЕНИВЫЕ ВКЛАДКИ И МГНОВЕННЫЕ ФИЛЬТРЫ ---
-_smartRenderList = function(containerId, itemsData, prefix, htmlGenerator) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  const count = itemsData.length;
-
-  for (let i = 0; i < count; i++) {
-    const blockId = `${prefix}_block_${i}`;
-
-    if (!itemsData[i] || itemsData[i]._deleted) {
-      const el = document.getElementById(blockId);
-      if (el) el.remove();
-      continue;
-    }
-
-    const yearMatch = itemsData[i].name.match(/\d{4}/);
-    const year = yearMatch ? yearMatch[0] : '';
-    const matchYear = (currentFilterYear === 'All' || currentFilterYear === year);
-    const matchMonth = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
-    const isVisible = matchYear && matchMonth;
-
-    let block = document.getElementById(blockId);
-
-    // Если месяц скрыт фильтром и уже есть в DOM — просто скрываем его без генерации HTML
-    if (!isVisible && block) {
-      block.style.display = 'none';
-      continue;
-    }
-
-    const newHTML = htmlGenerator(itemsData[i], i);
-
-    if (!block) {
-      block = document.createElement('div');
-      block.className = 'bento-card';
-      block.id = blockId;
-      block.innerHTML = newHTML;
-      block._lastRawHtml = newHTML;
-      container.appendChild(block);
-    } else if (block._lastRawHtml !== newHTML) {
-      // Сравниваем с исходной строкой _lastRawHtml, а не с мутированным браузером innerHTML
-      const active = document.activeElement;
-      const activeId = active ? active.id : null;
-      const activeDataId = active ? active.getAttribute('data-id') : null;
-      const selStart = active ? active.selectionStart : 0;
-
-      block.innerHTML = newHTML;
-      block._lastRawHtml = newHTML;
-      _inputElCache.clear();
-
-      let newActive = activeId ? document.getElementById(activeId) : null;
-      if (!newActive && activeDataId) {
-        newActive = block.querySelector(`input[data-id="${activeDataId}"]`);
-      }
-      if (newActive) {
-        newActive.focus();
-        try { newActive.setSelectionRange(selStart, selStart); } catch (e) {}
-      }
-    }
-
-    block.style.display = isVisible ? 'block' : 'none';
-  }
-
-  const children = Array.from(container.children);
-  children.forEach(child => {
-    if (child.id && child.id.startsWith(prefix) && child.id.includes('_block_')) {
-      const idx = parseInt(child.id.split('_block_')[1], 10);
-      if (idx >= count) child.remove();
-    }
-  });
-
-  applyResponsiveTableWidths();
-  applyChannelSearchFilter();
-};
-
-function _renderSingleTab(tabId) {
-  _dirtyTabs.delete(tabId);
-  if (tabId === 'traffic') renderTraffic();
-  else if (tabId === 'smm') renderSMM();
-  else if (tabId === 'organic') renderOrganic();
-  else if (tabId === 'overview') renderOverview();
-}
-
-renderAll = function() {
-  _inputElCache.clear();
-  _smmMetricSlugCache.clear();
-  ['traffic', 'smm', 'organic', 'overview'].forEach(t => _dirtyTabs.add(t));
-  _renderSingleTab(_activeTabId);
-};
-
-openTab = function(t, btn) {
-  _activeTabId = t;
-  document.querySelectorAll('.kpi-content').forEach(e => e.classList.remove('active'));
-  document.querySelectorAll('.kpi-tab-btn').forEach(e => e.classList.remove('active'));
-  const target = document.getElementById(t);
-  if (target) target.classList.add('active');
-  if (btn) btn.classList.add('active');
-
-  updateChannelFilterDropdown();
-  if (_dirtyTabs.has(t) || t === 'overview') {
-    _renderSingleTab(t);
-  } else {
-    applyChannelSearchFilter();
-  }
-};
-
-// Мгновенная фильтрация без пересборки таблиц, если блоки уже отрендерены
-function _applyFastMonthVisibility() {
-  ['tr', 'smm', 'org'].forEach(prefix => {
-    monthsData.forEach((m, i) => {
-      if (!m || m._deleted) return;
-      const block = document.getElementById(`${prefix}_block_${i}`);
-      if (!block) return;
-      const year = m.name.match(/\d{4}/)?.[0] || '';
-      const matchY = (currentFilterYear === 'All' || currentFilterYear === year);
-      const matchM = (currentFilterMonth === 'All' || String(currentFilterMonth) === String(i));
-      block.style.display = (matchY && matchM) ? 'block' : 'none';
-    });
-  });
-  if (_activeTabId === 'overview') renderOverview();
-}
-
-changeFilterYear = function(year) {
-  currentFilterYear = year;
-  currentFilterMonth = 'All';
-  saveUserPrefs();
-  updateFilterDropdowns();
-  _applyFastMonthVisibility();
-  applyChannelSearchFilter();
-};
-
-changeFilterMonth = function(mIdx) {
-  currentFilterMonth = mIdx;
-  saveUserPrefs();
-  updateChannelFilterDropdown();
-  _applyFastMonthVisibility();
-  applyChannelSearchFilter();
-};
-
-// Мгновенное сворачивание недель и дней напрямую в DOM (0 мс вместо полного рендера)
-toggleWeek = function(mI, cI, wI, type = 'traffic') {
-  const key = uiKeyWeekCollapsed(mI, cI, wI);
-  const next = !inputState[key];
-  inputState[key] = next;
-  persistInputKey(key, next);
-
-  const attr = type === 'smm' ? 'data-smm-week-group' : 'data-week-group';
-  const rows = document.querySelectorAll(`tr[${attr}="m${mI}_c${cI}_w${wI}"]`);
-  rows.forEach(r => r.classList.toggle('week-collapsed', next));
-
-  const btn = document.querySelector(`button[onclick="toggleWeek(${mI},${cI},${wI}${type === 'smm' ? ",'smm'" : ''})"]`);
-  if (btn) btn.innerText = next ? '▸' : '▾';
-};
-
-toggleDays = function(uniqueId) {
-  const stateKey = 'ui_days_expanded_' + uniqueId;
-  const next = !inputState[stateKey];
-  inputState[stateKey] = next;
-  persistInputKey(stateKey, next);
-
-  const dayRows = document.querySelectorAll(`.day-row-${uniqueId}`);
-  if (dayRows.length > 0) {
-    dayRows.forEach(r => r.classList.toggle('active', next));
-    const btn = document.querySelector(`button[onclick="toggleDays('${uniqueId}')"]`);
-    if (btn) btn.classList.toggle('active', next);
-  } else {
-    if (uniqueId.startsWith('smm_')) renderSMM();
-    else if (uniqueId.startsWith('org_')) renderOrganic();
-    else renderTraffic();
-  }
-};
-
-// --- D. БЫСТРЫЙ ПЕРЕСЧЕТ ДНЕЙ И НЕБЛОКИРУЮЩИЙ ВВОД ---
-calcSMMDaysToWeek = function(mI, cI, wI) {
-  const month = monthsData[mI];
-  if (!month || month._deleted) return;
-
-  const days = month.weeks[wI].days || [];
-  const ch = month.smmChannels[cI];
-  if (!ch || ch._deleted) return;
-
-  const reachMet = findReachMetricName(ch.metrics);
-  const errMet = findErrMetricName(ch.metrics);
-
-  let weightedErrFact = null;
-
-  if (reachMet && errMet) {
-    let totalReactions = 0;
-    let totalReach = 0;
-    let hasErrDayData = false;
-
-    for (let dI = 0; dI < days.length; dI++) {
-      const rVal = inputState[getSMMDayKey(mI, cI, wI, dI, reachMet)];
-      const eVal = inputState[getSMMDayKey(mI, cI, wI, dI, errMet)];
-      if (rVal !== undefined && rVal !== null && rVal !== '' && eVal !== undefined && eVal !== null && eVal !== '') {
-        const r = +rVal;
-        const e = +eVal;
-        if (r > 0) {
-          totalReactions += r * (e / 100);
-          totalReach += r;
-          hasErrDayData = true;
-        }
-      }
-    }
-    if (hasErrDayData && totalReach > 0) {
-      weightedErrFact = (totalReactions / totalReach) * 100;
-    }
-  }
-
-  for (let mIdx = 0; mIdx < ch.metrics.length; mIdx++) {
-    const metricName = ch.metrics[mIdx];
-    const isPct = isPercentMetric(metricName);
-    const isErr = metricName.toLowerCase().includes('err');
-
-    let sum = 0;
-    let cnt = 0;
-    let finalVal = null;
-
-    if (isErr && weightedErrFact !== null) {
-      finalVal = weightedErrFact;
-    } else {
-      for (let dI = 0; dI < days.length; dI++) {
-        const val = inputState[getSMMDayKey(mI, cI, wI, dI, metricName)];
-        if (val !== undefined && val !== null && val !== '') {
-          sum += (+val || 0);
-          cnt += 1;
-        }
-      }
-      if (cnt > 0) {
-        finalVal = (isPct && !isErr) ? (sum / cnt) : sum;
-      }
-    }
-
-    const factKey = getSMMKey(mI, cI, wI, metricName, 'fact');
-    const el = _getFastInputEl(factKey);
-
-    if (finalVal !== null) {
-      inputState[factKey] = finalVal;
-      if (el && document.activeElement !== el) {
-        el.value = isPct ? formatPercent(finalVal) : formatCount(finalVal);
-        el.classList.add('cell-auto-sum');
-        el.title = 'Авто-расчёт по заполненным дням недели';
-      }
-    } else if (el) {
-      el.classList.remove('cell-auto-sum');
-      el.title = '';
-    }
-  }
-};
-
-calcOrgDaysToWeek = function(mI, wI, cI) {
-  const month = monthsData[mI];
-  if (!month || month._deleted) return;
-
-  const weekObj = month.weeks[wI];
-  if (!weekObj || !weekObj.days) return;
-
-  const rowId = `org_m${mI}_w${wI}`;
-  let sumV = 0, sumL = 0, sumRev = 0;
-  let hasDayV = false, hasDayL = false, hasDayRev = false;
-
-  for (let dI = 0; dI < weekObj.days.length; dI++) {
-    const dayId = `${rowId}_d${dI}_c${cI}`;
-    const rawV = inputState[`${dayId}_visits`];
-    const rawL = inputState[`${dayId}_leads`];
-    const rawRev = inputState[`${dayId}_revenue`];
-
-    if (rawV !== undefined && rawV !== null && rawV !== '') hasDayV = true;
-    if (rawL !== undefined && rawL !== null && rawL !== '') hasDayL = true;
-    if (rawRev !== undefined && rawRev !== null && rawRev !== '') hasDayRev = true;
-
-    const vV = +rawV || 0;
-    const vL = +rawL || 0;
-    const vRev = +rawRev || 0;
-
-    sumV += vV;
-    sumL += vL;
-    sumRev += vRev;
-
-    const elDayCr = document.getElementById(`${dayId}_cr`);
-    if (elDayCr) {
-      elDayCr.innerText = vV > 0 && vL > 0 ? formatPercent((vL / vV) * 100) : '-';
-    }
-  }
-
-  const wInpV = _getFastInputEl(`${rowId}_c${cI}_fact_visits`);
-  if (hasDayV) {
-    inputState[`${rowId}_c${cI}_fact_visits`] = sumV;
-    if (wInpV && document.activeElement !== wInpV) {
-      wInpV.value = formatCount(sumV);
-      wInpV.classList.add('cell-auto-sum');
-    }
-  } else if (wInpV) {
-    wInpV.classList.remove('cell-auto-sum');
-  }
-
-  const wInpL = _getFastInputEl(`${rowId}_c${cI}_fact_leads`);
-  if (hasDayL) {
-    inputState[`${rowId}_c${cI}_fact_leads`] = sumL;
-    if (wInpL && document.activeElement !== wInpL) {
-      wInpL.value = formatCount(sumL);
-      wInpL.classList.add('cell-auto-sum');
-    }
-  } else if (wInpL) {
-    wInpL.classList.remove('cell-auto-sum');
-  }
-
-  const wInpRev = _getFastInputEl(`${rowId}_c${cI}_fact_revenue`);
-  if (hasDayRev) {
-    inputState[`${rowId}_c${cI}_fact_revenue`] = sumRev;
-    if (wInpRev && document.activeElement !== wInpRev) {
-      wInpRev.value = formatMoney(sumRev);
-      wInpRev.classList.add('cell-auto-sum');
-    }
-  } else if (wInpRev) {
-    wInpRev.classList.remove('cell-auto-sum');
-  }
-};
-
-function _scheduleRecalcForId(id) {
-  _rafRecalcQueue.add(id);
-  _dirtyTabs.add('overview');
-  if (_rafRecalcId) return;
-  _rafRecalcId = requestAnimationFrame(() => {
-    _rafRecalcId = null;
-    const ids = Array.from(_rafRecalcQueue);
-    _rafRecalcQueue.clear();
-    ids.forEach(itemId => {
-      if (itemId.startsWith('smm_')) recalcSMM(itemId);
-      else if (itemId.startsWith('org_')) recalcOrganic(itemId);
-      else recalc(itemId);
-    });
-  });
-}
-
-onCellBlur = function(el) {
-  const id = el.dataset.id;
-  if (!id) return;
-  const kind = el.dataset.kind || 'count';
-  const rawValue = el.value.trim();
-  const wasEdited = el.dataset.edited === "true";
-  el.dataset.edited = "false";
-
-  if (!wasEdited) {
-    const existing = inputState[id];
-    if (existing === undefined || existing === null || existing === '') el.value = '';
-    else if (kind === 'money') el.value = formatMoney(existing);
-    else if (kind === 'percent') el.value = formatPercent(existing);
-    else el.value = formatCount(existing);
-    return;
-  }
-
-  if (_firebaseInputTimers[id]) {
-    clearTimeout(_firebaseInputTimers[id]);
-    delete _firebaseInputTimers[id];
-  }
-
-  if (rawValue === '') {
-    el.value = '';
-    delete inputState[id];
-    persistInputKey(id, null);
-    _scheduleRecalcForId(id);
-    return;
-  }
-
-  let n = (kind === 'percent')
-    ? applyDzenMagic(el, parsePercentLike(rawValue), rawValue)
-    : parseNumberLike(rawValue);
-
-  inputState[id] = n;
-  persistInputKey(id, n);
-
-  if (kind === 'money') el.value = formatMoney(n);
-  else if (kind === 'percent') el.value = formatPercent(n);
-  else el.value = formatCount(n);
-
-  _scheduleRecalcForId(id);
-};
-
-setupEventListeners = function() {
-  const handleInput = (e) => {
-    const el = e.target;
-    if (!el || !el.classList.contains('cell-input')) return;
-    const id = el.dataset.id;
-    if (!id) return;
-
-    const kind = el.dataset.kind || 'count';
-    el.dataset.edited = "true";
-    _dirtyInputKeys.add(id);
-
-    const raw = el.value.trim();
-    if (raw === '') {
-      delete inputState[id];
-    } else {
-      inputState[id] = (kind === 'percent') ? parsePercentLike(raw) : parseNumberLike(raw);
-    }
-
-    _scheduleRecalcForId(id);
-
-    if (_firebaseInputTimers[id]) clearTimeout(_firebaseInputTimers[id]);
-    _firebaseInputTimers[id] = setTimeout(() => {
-      delete _firebaseInputTimers[id];
-      persistInputKey(id, inputState[id] ?? null);
-    }, 650);
-  };
-
-  const handleFocus = (e) => {
-    if (e.target && e.target.classList.contains('cell-input')) onCellFocus(e.target);
-  };
-
-  const handleBlur = (e) => {
-    if (e.target && e.target.classList.contains('cell-input')) onCellBlur(e.target);
-  };
-
-  ['trafficContainer', 'smmContainer', 'organicContainer'].forEach(containerId => {
-    const c = document.getElementById(containerId);
-    if (c) {
-      c.addEventListener('input', handleInput);
-      c.addEventListener('focusin', handleFocus);
-      c.addEventListener('focusout', handleBlur);
-    }
-  });
-};
-
-// --- E. ПЕРЕИСПОЛЬЗОВАНИЕ CHART.JS БЕЗ DESTROY И БЫСТРАЯ СОРТИРОВКА ---
-createLineChart = function(canvasId, labels, label1, data1, color1, label2, data2) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx || typeof Chart === 'undefined') return;
-
-  const colors = getChartColors();
-  const isBar = currentChartType === 'bar';
-  const targetType = isBar ? 'bar' : 'line';
-  const existing = chartInstances[canvasId];
-
-  // Если график уже создан и тип не изменился — обновляем данные на месте без пересоздания Canvas
-  if (existing && existing.config.type === targetType) {
-    existing.data.labels = labels;
-    existing.data.datasets[0].label = label1;
-    existing.data.datasets[0].data = data1;
-    existing.data.datasets[0].borderColor = color1;
-    existing.data.datasets[0].backgroundColor = isBar ? color1 + 'cc' : color1;
-
-    existing.data.datasets[1].label = label2;
-    existing.data.datasets[1].data = data2;
-    existing.data.datasets[1].borderColor = isBar ? '#64748b' : color1;
-    existing.data.datasets[1].backgroundColor = isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent';
-
-    existing.options.plugins.legend.labels.color = colors.text;
-    existing.options.scales.x.grid.color = colors.grid;
-    existing.options.scales.x.ticks.color = colors.text;
-    existing.options.scales.y.grid.color = colors.grid;
-    existing.options.scales.y.ticks.color = colors.text;
-
-    existing.update('none');
-    return;
-  }
-
-  if (existing) existing.destroy();
-
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: targetType,
-    data: {
-      labels,
-      datasets: [
-        {
-          label: label1,
-          data: data1,
-          borderColor: color1,
-          backgroundColor: isBar ? color1 + 'cc' : color1,
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          tension: 0.3,
-          pointRadius: isBar ? 0 : 3.5
-        },
-        {
-          label: label2,
-          data: data2,
-          borderColor: isBar ? '#64748b' : color1,
-          backgroundColor: isBar ? 'rgba(148, 163, 184, 0.25)' : 'transparent',
-          borderWidth: 2,
-          borderRadius: isBar ? 6 : 0,
-          borderDash: isBar ? [] : [6, 4],
-          tension: 0.3,
-          pointRadius: 0,
-          pointHoverRadius: 0
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: {
-        legend: {
-          labels: {
-            color: colors.text,
-            font: { family: 'Inter', weight: '600', size: 11 }
-          }
-        },
-        tooltip: { mode: 'index', intersect: false }
-      },
-      scales: {
-        x: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } }
-        },
-        y: {
-          grid: { color: colors.grid },
-          ticks: { color: colors.text, font: { family: 'Inter', size: 11 } },
-          beginAtZero: true
-        }
-      }
-    }
-  });
-};
-
-const _origRenderCompareTable = renderCompareTable;
-renderCompareTable = function(monthSummaries) {
-  _cachedMonthSummaries = monthSummaries || [];
-  _origRenderCompareTable(_cachedMonthSummaries);
-};
-
-// Сортировка таблицы сравнения больше не вызывает пересчет всех месяцев и перерисовку 6 графиков
-sortCompareTableBy = function(col) {
-  if (compareSortCol === col) {
-    compareSortAsc = !compareSortAsc;
-  } else {
-    compareSortCol = col;
-    compareSortAsc = false;
-  }
-  _origRenderCompareTable(_cachedMonthSummaries);
-};
-
-// --- F. ГРАНУЛЯРНАЯ REALTIME-СИНХРОНИЗАЦИЯ FIREBASE (ДЛЯ 1-2 ПОЛЬЗОВАТЕЛЕЙ) ---
-function _applyRemoteCellChange(key, val) {
-  if (_dirtyInputKeys.has(key)) return;
-
-  if (val === null || val === undefined) {
-    delete inputState[key];
-  } else {
-    inputState[key] = val;
-  }
-
-  if (key.startsWith('ui_')) {
-    const newUiHash = getUiHash(inputState);
-    if (newUiHash !== lastUiHash) {
-      lastUiHash = newUiHash;
-      renderAll();
-    }
-    return;
-  }
-
-  const el = _getFastInputEl(key);
-  if (el && document.activeElement !== el) {
-    const kind = el.dataset.kind || 'count';
-    el.value = (val === null || val === undefined || val === '')
-      ? ''
-      : (kind === 'money' ? formatMoney(val) : (kind === 'percent' ? formatPercent(val) : formatCount(val)));
-  }
-
-  _scheduleRecalcForId(key);
-  saveLocalBackup();
-}
-
 initFirebaseListener = function(callback) {
-  if (!db) {
-    if (callback) callback(false);
-    return;
-  }
+  if (!db) {
+    if (callback) callback(false);
+    return;
+  }
 
-  if (dbListenerRef) {
-    db.ref('kpi_project').off('value', dbListenerRef);
-    dbListenerRef = null;
-  }
-  _firebaseRefs.forEach(item => item.ref.off(item.event, item.fn));
-  _firebaseRefs = [];
+  if (dbListenerRef) {
+    db.ref('kpi_project').off('value', dbListenerRef);
+    dbListenerRef = null;
+  }
+  _firebaseRefs.forEach(item => item.ref.off(item.event, item.fn));
+  _firebaseRefs = [];
 
-  // Шаг 1: Быстрая однократная загрузка начального слепка
-  db.ref('kpi_project').once('value').then((snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      monthsData = data.monthsData || [];
-      inputState = data.inputState || {};
-      lastMonthsJson = JSON.stringify(monthsData);
-      lastUiHash = getUiHash(inputState);
-      saveLocalBackup();
-      updateFilterDropdowns();
-      renderAll();
-    } else if (monthsData.length === 0) {
-      addNewMonth();
-    }
+  // Шаг 1: Быстрая однократная загрузка начального слепка
+  db.ref('kpi_project').once('value').then((snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      monthsData = data.monthsData || [];
+      inputState = data.inputState || {};
+      lastMonthsJson = JSON.stringify(monthsData);
+      lastUiHash = getUiHash(inputState);
+      saveLocalBackup();
+      updateFilterDropdowns();
+      renderAll();
+    } else if (monthsData.length === 0) {
+      addNewMonth();
+    }
 
-    setSaveStatus('online');
-    if (callback) callback(true);
+    setSaveStatus('online');
+    if (callback) callback(true);
 
-    // Шаг 2: Подписка отдельно на структуру месяцев
-    const monthsRef = db.ref('kpi_project/monthsData');
-    const onMonthsChange = (snap) => {
-      const newMonths = snap.val() || [];
-      const newJson = JSON.stringify(newMonths);
-      if (newJson !== lastMonthsJson) {
-        monthsData = newMonths;
-        lastMonthsJson = newJson;
-        saveLocalBackup();
-        updateFilterDropdowns();
-        renderAll();
-      }
-    };
-    monthsRef.on('value', onMonthsChange);
-    _firebaseRefs.push({ ref: monthsRef, event: 'value', fn: onMonthsChange });
+    // Шаг 2: Подписка отдельно на структуру месяцев
+    const monthsRef = db.ref('kpi_project/monthsData');
+    const onMonthsChange = (snap) => {
+      const newMonths = snap.val() || [];
+      const newJson = JSON.stringify(newMonths);
+      if (newJson !== lastMonthsJson) {
+        monthsData = newMonths;
+        lastMonthsJson = newJson;
+        saveLocalBackup();
+        updateFilterDropdowns();
+        renderAll();
+      }
+    };
+    monthsRef.on('value', onMonthsChange);
+    _firebaseRefs.push({ ref: monthsRef, event: 'value', fn: onMonthsChange });
 
-    // Шаг 3: Точечные подписки на ячейки inputState (передают по 20 байт вместо всей БД)
-    const stateRef = db.ref('kpi_project/inputState');
-    const onChildChanged = (snap) => _applyRemoteCellChange(snap.key, snap.val());
-    const onChildAdded = (snap) => {
-      if (inputState[snap.key] !== snap.val()) {
-        _applyRemoteCellChange(snap.key, snap.val());
-      }
-    };
-    const onChildRemoved = (snap) => _applyRemoteCellChange(snap.key, null);
+    // Шаг 3: Точечные подписки на ячейки inputState (передают по 20 байт вместо всей БД)
+    const stateRef = db.ref('kpi_project/inputState');
+    const onChildChanged = (snap) => _applyRemoteCellChange(snap.key, snap.val());
+    const onChildAdded = (snap) => {
+      if (inputState[snap.key] !== snap.val()) {
+        _applyRemoteCellChange(snap.key, snap.val());
+      }
+    };
+    const onChildRemoved = (snap) => _applyRemoteCellChange(snap.key, null);
 
-    stateRef.on('child_changed', onChildChanged);
-    stateRef.on('child_added', onChildAdded);
-    stateRef.on('child_removed', onChildRemoved);
+    stateRef.on('child_changed', onChildChanged);
+    stateRef.on('child_added', onChildAdded);
+    stateRef.on('child_removed', onChildRemoved);
 
-    _firebaseRefs.push(
-      { ref: stateRef, event: 'child_changed', fn: onChildChanged },
-      { ref: stateRef, event: 'child_added', fn: onChildAdded },
-      { ref: stateRef, event: 'child_removed', fn: onChildRemoved }
-    );
-  }).catch((error) => {
-    console.warn("Firebase Access/Network Error:", error.code);
-    setSaveStatus('error');
-    if (callback) callback(false);
-  });
+    _firebaseRefs.push(
+      { ref: stateRef, event: 'child_changed', fn: onChildChanged },
+      { ref: stateRef, event: 'child_added', fn: onChildAdded },
+      { ref: stateRef, event: 'child_removed', fn: onChildRemoved }
+    );
+  }).catch((error) => {
+    console.warn("Firebase Access/Network Error:", error.code);
+    setSaveStatus('error');
+    if (callback) callback(false);
+  });
 };
    
 /* =============================================================
