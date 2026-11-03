@@ -2232,13 +2232,28 @@ function setGlobalTableView(mode) {
   renderOrganic();
 }
 
+function _renderSingleTab(tabId) {
+  _dirtyTabs.delete(tabId);
+  if (tabId === 'traffic') renderTraffic();
+  else if (tabId === 'smm') renderSMM();
+  else if (tabId === 'organic') renderOrganic();
+  else if (tabId === 'overview') renderOverview();
+}
+
 function openTab(t, btn) {
+  _activeTabId = t;
   document.querySelectorAll('.kpi-content').forEach(e => e.classList.remove('active'));
   document.querySelectorAll('.kpi-tab-btn').forEach(e => e.classList.remove('active'));
   const target = document.getElementById(t);
   if (target) target.classList.add('active');
   if (btn) btn.classList.add('active');
-  if (t === 'overview') renderOverview();
+
+  updateChannelFilterDropdown();
+  if (_dirtyTabs.has(t) || t === 'overview') {
+    _renderSingleTab(t);
+  } else {
+    applyChannelSearchFilter();
+  }
 }
 
 function updateFilterDropdowns() {
@@ -5866,7 +5881,36 @@ function getUiHash(state) {
     .map(k => k + ':' + state[k])
     .join('|');
 }
+function _applyRemoteCellChange(key, val) {
+  if (_dirtyInputKeys.has(key)) return;
 
+  if (val === null || val === undefined) {
+    delete inputState[key];
+  } else {
+    inputState[key] = val;
+  }
+
+  if (key.startsWith('ui_')) {
+    const newUiHash = getUiHash(inputState);
+    if (newUiHash !== lastUiHash) {
+      lastUiHash = newUiHash;
+      renderAll();
+    }
+    return;
+  }
+
+  const el = _getFastInputEl(key);
+  if (el && document.activeElement !== el) {
+    const kind = el.dataset.kind || 'count';
+    el.value = (val === null || val === undefined || val === '')
+      ? ''
+      : (kind === 'money' ? formatMoney(val) : (kind === 'percent' ? formatPercent(val) : formatCount(val)));
+  }
+
+  _scheduleRecalcForId(key);
+  saveLocalBackup();
+}
+   
 initFirebaseListener = function(callback) {
   if (!db) {
     if (callback) callback(false, { code: 'FIREBASE_NOT_INITIALIZED', message: 'Firebase SDK или подключение к базе не инициализировано.' });
