@@ -4568,23 +4568,27 @@ function calcSMMChannelTotal(mI, cI) {
     if (isErr && hasErrPair) {
       sumPlan = channelErrStats.pReach > 0 ? (channelErrStats.pReactions / channelErrStats.pReach) * 100 : 0;
       sumFact = channelErrStats.fReach > 0 ? (channelErrStats.fReactions / channelErrStats.fReach) * 100 : 0;
-    } else {
-      let weeksCount = 0;
+    } } else {
+      let planWeeksCount = 0;
+      let factWeeksCount = 0;
 
       month.weeks.forEach((w, wI) => {
         const vP = inputState[getSMMKey(mI, cI, wI, met, 'plan')];
         const vF = inputState[getSMMKey(mI, cI, wI, met, 'fact')];
 
-        if (vP !== undefined || vF !== undefined) {
-          sumPlan += vP || 0;
-          sumFact += vF || 0;
-          weeksCount++;
+        if (vP !== undefined && vP !== null && vP !== '') {
+          sumPlan += +vP || 0;
+          planWeeksCount++;
+        }
+        if (vF !== undefined && vF !== null && vF !== '') {
+          sumFact += +vF || 0;
+          factWeeksCount++;
         }
       });
 
-      if (isPct && !isErr && weeksCount > 0) {
-        sumPlan /= weeksCount;
-        sumFact /= weeksCount;
+      if (isPct && !isErr) {
+        if (planWeeksCount > 0) sumPlan /= planWeeksCount;
+        if (factWeeksCount > 0) sumFact /= factWeeksCount;
       }
     }
 
