@@ -5225,12 +5225,17 @@ function onCellFocus(el) {
  */
 function applyDzenMagic(el, val, rawString = '') {
   if (!el || val == null || val === '') return val;
+  // Если пользователь явно ввёл знак %, оставляем число как готовый процент
   if (String(rawString).includes('%')) return val;
 
   const chName = (el.dataset.channel || '').toLowerCase();
   const metricName = (el.dataset.metric || '').toLowerCase();
 
-  if (chName.includes('dzen') || chName.includes('дзен')) {
+  const isDzen = chName.includes('dzen') || chName.includes('дзен');
+  const isYoutube = chName.includes('youtube') || chName.includes('ютуб');
+  const isTelegram = chName.includes('telegram') || chName.includes('телеграм') || chName === 'тг' || chName === 'tg';
+
+  if (isDzen || isYoutube || isTelegram) {
     if (metricName.includes('% дочитывания') || metricName.includes('err')) {
       const id = el.dataset.id;
 
@@ -5245,18 +5250,37 @@ function applyDzenMagic(el, val, rawString = '') {
         const cI = cMatch[1];
         const wI = wMatch[1];
 
-        let reachKey = '';
         const ch = monthsData[mI]?.smmChannels?.[cI];
-        if (!ch) return val;
+        if (!ch || !Array.isArray(ch.metrics)) return val;
 
-        const reachMetricOriginalName = findReachMetricName(ch.metrics) || 'Показы';
+        // Определяем целевую метрику базы для расчёта ERR в зависимости от канала
+        let reachMetricOriginalName = null;
 
-        if (dMatch) reachKey = getSMMDayKey(mI, cI, wI, dMatch[1], reachMetricOriginalName);
-        else if (typeMatch) reachKey = getSMMKey(mI, cI, wI, reachMetricOriginalName, typeMatch[1]);
+        if (isTelegram) {
+          // Для ТГ ищем приоритетно "Просмотры постов"
+          reachMetricOriginalName = ch.metrics.find(m => m.toLowerCase().includes('просмотры постов')) 
+                                 || findReachMetricName(ch.metrics) 
+                                 || 'Просмотры постов';
+        } else if (isYoutube) {
+          // Для YouTube ищем "Просмотры"
+          reachMetricOriginalName = ch.metrics.find(m => m.toLowerCase() === 'просмотры') 
+                                 || findReachMetricName(ch.metrics) 
+                                 || 'Просмотры';
+        } else {
+          // Для Дзена оставляем стандартную логику ("Показы")
+          reachMetricOriginalName = findReachMetricName(ch.metrics) || 'Показы';
+        }
 
-        const impressions = inputState[reachKey] || 0;
-        if (impressions > 0) {
-          return (val / impressions) * 100;
+        let reachKey = '';
+        if (dMatch) {
+          reachKey = getSMMDayKey(mI, cI, wI, dMatch[1], reachMetricOriginalName);
+        } else if (typeMatch) {
+          reachKey = getSMMKey(mI, cI, wI, reachMetricOriginalName, typeMatch[1]);
+        }
+
+        const baseViews = inputState[reachKey] || 0;
+        if (baseViews > 0) {
+          return (val / baseViews) * 100;
         }
       }
     }
